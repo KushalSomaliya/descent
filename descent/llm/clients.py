@@ -99,7 +99,10 @@ class LLMClient:
         price = self.price or PRICES.get(self.model)
         if not price:
             return None
-        return (self.usage.input_tokens * price[0] + self.usage.output_tokens * price[1]) / 1e6
+        u = self.usage
+        cache_read_rate = 0.1 if isinstance(self, AnthropicClient) else 1.0  # Claude bills cache reads at ~10%
+        fresh = u.input_tokens - u.cache_read_tokens
+        return (fresh * price[0] + u.cache_read_tokens * price[0] * cache_read_rate + u.output_tokens * price[1]) / 1e6
 
     # ---- HTTP with retries ----
     def _post(self, url: str, headers: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
