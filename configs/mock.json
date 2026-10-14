@@ -1,0 +1,8 @@
+{
+  "seed": 2,
+  "agents": [
+    {"policy": "llm", "model": "mock:fake", "count": 8},
+    {"policy": "bot:fair", "count": 4},
+    {"policy": "bot:killer", "count": 4}
+  ]
+}

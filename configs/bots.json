@@ -1,0 +1,10 @@
+{
+  "seed": 1,
+  "agents": [
+    {"policy": "bot:fair", "count": 4},
+    {"policy": "bot:greedy", "count": 4},
+    {"policy": "bot:paranoid", "count": 4},
+    {"policy": "bot:killer", "count": 2},
+    {"policy": "bot:random", "count": 2}
+  ]
+}

@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Descent Replay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@700;900&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --wall: #bdb8ad;        /* poured concrete */
+  --wall-2: #a9a397;
+  --seam: #8f897d;
+  --shaft: #34322e;       /* the hole */
+  --ink: #1f1d1a;
+  --ink-soft: #4a463f;
+  --paper: #d6d1c6;
+  --food: #d39a2c;        /* platform brass / food */
+  --food-ink: #3a2a08;
+  --blood: #8b261f;
+  --blood-soft: #c9574c;
+  --guard: #2f5d6e;
+  --dead: #6d685f;
+  --focus: #1f6fd1;
+  --font-display: "Big Shoulders Stencil Display", "Impact", sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wall: #4a4741; --wall-2: #403d38; --seam: #5c5850; --shaft: #1d1c1a;
+    --ink: #ebe6db; --ink-soft: #b9b3a6; --paper: #2f2d29;
+    --food: #e0a93c; --food-ink: #2a1d04; --blood: #d0574b; --blood-soft: #e07a6f;
+    --guard: #6fa7bb; --dead: #8a857b; --focus: #7db3ff; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --wall: #4a4741; --wall-2: #403d38; --seam: #5c5850; --shaft: #1d1c1a;
+  --ink: #ebe6db; --ink-soft: #b9b3a6; --paper: #2f2d29;
+  --food: #e0a93c; --food-ink: #2a1d04; --blood: #d0574b; --blood-soft: #e07a6f;
+  --guard: #6fa7bb; --dead: #8a857b; --focus: #7db3ff; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  min-height: 100vh;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ---------- top bar ---------- */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px;
+  padding: 12px 16px;
+  background: var(--shaft); color: #ece7dc;
+}
+.brand { font: 900 30px/1 var(--font-display); letter-spacing: .04em; margin-right: 6px; }
+.controls { display: flex; align-items: center; gap: 8px; flex: 1 1 360px; min-width: 0; }
+.controls button {
+  border: 1px solid #6d685f; background: transparent; color: #ece7dc;
+  padding: 5px 11px; border-radius: 3px; cursor: pointer;
+}
+.controls button:hover { background: #4a4741; }
+.controls input[type=range] { flex: 1; min-width: 80px; accent-color: var(--food); }
+.daylabel { font: 700 22px/1 var(--font-display); min-width: 96px; text-align: right; letter-spacing: .03em; }
+.bar .right { display: flex; gap: 8px; align-items: center; }
+.bar label.file { border: 1px solid #6d685f; padding: 5px 11px; border-radius: 3px; cursor: pointer; }
+.bar label.file input { display: none; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+
+/* ---------- layout ---------- */
+main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 0; min-height: calc(100vh - 58px); }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+/* ---------- the tower ---------- */
+.tower { background: var(--shaft); padding: 14px 16px 24px; }
+.floor {
+  position: relative;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 128px minmax(0, 1fr);
+  gap: 10px; align-items: stretch;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 119px, rgba(0,0,0,.05) 119px 120px),
+    linear-gradient(var(--wall), var(--wall-2));
+  border-bottom: 6px solid var(--seam);
+  padding: 10px 10px 10px 0;
+  min-height: 112px;
+}
+.floor:first-child { border-top: 6px solid var(--seam); }
+.floor.lit { box-shadow: inset 0 0 0 3px var(--food); }
+.fnum {
+  font: 900 64px/0.9 var(--font-display);
+  color: var(--ink); opacity: .82;
+  text-align: center; align-self: center;
+}
+.hole {
+  position: relative;
+  background: var(--shaft);
+  border-left: 3px solid var(--seam); border-right: 3px solid var(--seam);
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch;
+  padding: 6px;
+}
+.hole .body {
+  font-size: 12px; color: #e9dcd6; background: #5a2a24; padding: 3px 6px; border-radius: 2px;
+}
+.slab {
+  position: absolute; left: 6px; right: 6px; top: 0;
+  height: 46px;
+  background: linear-gradient(#8c877d, #6e695f);
+  border-top: 3px solid #a8a296;
+  color: #fff; text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+  transition: transform .28s ease;
+  z-index: 2;
+}
+.slab .amt { font: 900 24px/1 var(--font-display); color: var(--food); }
+.slab .cap { font-size: 11px; opacity: .85; }
+.foodline { font-size: 12px; color: #ddd6c8; text-align: center; }
+
+.agent {
+  background: rgba(255,255,255,.18);
+  border: 1px solid rgba(0,0,0,.18);
+  border-radius: 3px; padding: 8px 10px; min-width: 0;
+  display: flex; flex-direction: column; gap: 5px;
+  cursor: pointer; text-align: left;
+}
+:root[data-theme="dark"] .agent { background: rgba(0,0,0,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .agent { background: rgba(0,0,0,.18); } }
+.agent:hover { border-color: var(--ink-soft); }
+.agent.sel { outline: 2px solid var(--food); }
+.agent.dead { opacity: .62; }
+.agent .nm { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.agent .nm b { font-size: 16px; }
+.agent .model { font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hearts { display: flex; gap: 3px; }
+.hearts i { width: 11px; height: 11px; border-radius: 2px; background: rgba(0,0,0,.18); }
+.hearts i.on { background: var(--blood); }
+.full { height: 5px; background: rgba(0,0,0,.18); border-radius: 3px; overflow: hidden; }
+.full span { display: block; height: 100%; background: var(--food); }
+.alloc { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+.alloc span { padding: 0 6px; border-radius: 2px; background: rgba(0,0,0,.12); }
+.alloc .attack { background: var(--blood); color: #fff; }
+.alloc .guard { background: var(--guard); color: #fff; }
+.fate { font-size: 12px; color: var(--blood); font-weight: 600; }
+.empty-slot { border: 1px dashed rgba(0,0,0,.25); border-radius: 3px; display: grid; place-items: center; font-size: 12px; color: var(--ink-soft); }
+.hitline { font-size: 12px; line-height: 1.3; font-weight: 600; color: #f0a59c; text-align: center; margin-bottom: auto; padding-top: 2px; }
+
+@media (max-width: 560px) {
+  .controls { flex-wrap: wrap; }
+  .daylabel { min-width: 0; font-size: 18px; }
+  .floor { grid-template-columns: 44px minmax(0,1fr) minmax(0,1fr); grid-template-rows: auto auto; }
+  .fnum { font-size: 40px; grid-row: span 2; }
+  .hole { grid-column: 2 / span 2; min-height: 54px; order: 3; }
+}
+
+/* ---------- side log ---------- */
+.log { padding: 18px 20px 40px; max-width: 760px; }
+.log h2 { font: 900 40px/1 var(--font-display); margin: 0 0 4px; letter-spacing: .02em; }
+.log .sub { color: var(--ink-soft); margin: 0 0 18px; }
+.log h3 { font-size: 15px; margin: 22px 0 8px; }
+.ev { margin: 0; padding: 0; list-style: none; }
+.ev li { padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,.1); }
+.ev li.death { color: var(--blood); font-weight: 600; }
+.convo { border-left: 3px solid var(--seam); padding: 2px 0 2px 12px; margin: 10px 0 14px; }
+.convo .fl { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+.msg { margin: 3px 0; max-width: 64ch; }
+.msg b { margin-right: 6px; }
+.thought { font-size: 14px; color: var(--ink-soft); margin: 4px 0 8px; max-width: 64ch; }
+.thought b { color: var(--ink); }
+.detail { background: rgba(0,0,0,.06); border-radius: 3px; padding: 12px 14px; margin-bottom: 18px; }
+.detail pre { white-space: pre-wrap; font: inherit; margin: 6px 0 0; }
+table.lb { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.lb th, table.lb td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(0,0,0,.12); }
+table.lb td.n, table.lb th.n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- empty state ---------- */
+.welcome { grid-column: 1 / -1; display: grid; place-items: center; padding: 60px 16px; background: var(--shaft); color: #ece7dc; min-height: calc(100vh - 58px); }
+.welcome .box { max-width: 520px; }
+.welcome h1 { font: 900 84px/0.9 var(--font-display); margin: 0 0 16px; }
+.welcome p { color: #cfc9bc; }
+.welcome.drag { outline: 3px dashed var(--food); outline-offset: -16px; }
+code { font-size: 13px; background: rgba(255,255,255,.1); padding: 1px 5px; border-radius: 2px; }
+
+@media (prefers-reduced-motion: reduce) { .slab { transition: none; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="brand">DESCENT</div>
+  <div class="controls" id="controls" hidden>
+    <button id="prev" aria-label="Previous day">Prev</button>
+    <button id="play" aria-label="Play">Play</button>
+    <button id="next" aria-label="Next day">Next</button>
+    <input type="range" id="slider" min="0" max="0" value="0" aria-label="Day">
+    <span class="daylabel" id="daylabel">Day 0</span>
+  </div>
+  <div class="right">
+    <label class="toggle"><input type="checkbox" id="godview" checked> Private thoughts</label>
+    <button id="results" class="toggle" hidden style="border:1px solid #6d685f;background:transparent;padding:5px 11px;border-radius:3px;cursor:pointer">Results</button>
+    <label class="file">Open replay<input type="file" id="file" accept=".json,application/json"></label>
+  </div>
+</div>
+
+<main id="main">
+  <section class="welcome" id="welcome">
+    <div class="box">
+      <h1>DESCENT</h1>
+      <p>Open a <code>replay.json</code> from the <code>runs/</code> folder to watch a game, or drop the file anywhere on this page.</p>
+      <p>Run a game first with <code>python -m descent run configs/bots.json</code>.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const main = $("#main");
+  const state = { replay: null, day: 0, playing: null, selected: null, results: false };
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const itemLabel = (k) => (k || "").replace(/_/g, " ");
+  const shortModel = (a) => a.model ? a.model.replace(/^[^:]+:/, "") : a.policy;
+
+  // ---------- loading ----------
+  function load(replay) {
+    if (!replay || !Array.isArray(replay.days) || !replay.agents) { alert("That file isn't a Descent replay."); return; }
+    state.replay = replay;
+    state.byId = Object.fromEntries(replay.agents.map((a) => [a.id, a]));
+    state.day = replay.days.length ? 1 : 0;
+    state.results = false;
+    $("#controls").hidden = false;
+    $("#results").hidden = false;
+    const slider = $("#slider");
+    slider.max = replay.days.length;
+    slider.value = state.day;
+    render(true);
+  }
+  $("#file").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (f) f.text().then((t) => load(JSON.parse(t))).catch(() => alert("Couldn't read that file as JSON."));
+  });
+  ["dragover", "dragenter"].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); $("#welcome")?.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((ev) => document.addEventListener(ev, () => $("#welcome")?.classList.remove("drag")));
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) f.text().then((t) => load(JSON.parse(t))).catch(() => alert("Couldn't read that file as JSON."));
+  });
+  const src = new URLSearchParams(location.search).get("src");
+  if (window.DESCENT_REPLAY) load(window.DESCENT_REPLAY);
+  else if (src) fetch(src).then((r) => r.json()).then(load).catch(() => alert("Couldn't load " + src));
+
+  // ---------- controls ----------
+  const setDay = (d, animate = true) => {
+    const max = state.replay.days.length;
+    state.day = Math.max(0, Math.min(max, d));
+    $("#slider").value = state.day;
+    state.results = false;
+    render(animate);
+  };
+  $("#prev").onclick = () => { stop(); setDay(state.day - 1); };
+  $("#next").onclick = () => { stop(); setDay(state.day + 1); };
+  $("#slider").oninput = (e) => { stop(); setDay(+e.target.value, false); };
+  $("#godview").onchange = () => render(false);
+  $("#results").onclick = () => { stop(); state.results = !state.results; render(false); };
+  const stop = () => { if (state.playing) { clearInterval(state.playing); state.playing = null; $("#play").textContent = "Play"; } };
+  $("#play").onclick = () => {
+    if (state.playing) return stop();
+    if (state.day >= state.replay.days.length) setDay(0, false);
+    $("#play").textContent = "Pause";
+    state.playing = setInterval(() => {
+      if (state.day >= state.replay.days.length) return stop();
+      setDay(state.day + 1);
+    }, reduceMotion ? 1600 : 2600);
+  };
+  document.addEventListener("keydown", (e) => {
+    if (!state.replay || e.target.matches("input[type=range]")) return;
+    if (e.key === "ArrowRight") { stop(); setDay(state.day + 1); }
+    if (e.key === "ArrowLeft") { stop(); setDay(state.day - 1); }
+  });
+
+  // ---------- render ----------
+  function dayRecord() { return state.day > 0 ? state.replay.days[state.day - 1] : null; }
+
+  function render(animate) {
+    const R = state.replay;
+    const rec = dayRecord();
+    $("#daylabel").textContent = state.day === 0 ? "Day 0" : `Day ${state.day}`;
+    const snap = rec ? rec.end : R.initial;
+    const floors = R.rules.floors;
+    const tower = document.createElement("section");
+    tower.className = "tower";
+    tower.setAttribute("aria-label", "The tower");
+
+    const deathsToday = new Set((rec?.deaths || []).map((d) => d.id));
+    for (let f = 1; f <= floors; f++) {
+      const ids = Object.keys(snap).filter((id) => snap[id].floor === f && (snap[id].alive || deathsToday.has(id)));
+      const row = document.createElement("div");
+      row.className = "floor";
+      row.dataset.floor = f;
+      const p = rec?.platform?.find((x) => x.floor === f);
+      const body = rec?.bodies?.find((b) => b.floor === f);
+      const cards = ids.slice(0, 2).map((id) => agentCard(id, snap[id], rec));
+      while (cards.length < 2) cards.push(`<div class="empty-slot">empty</div>`);
+      const hits = (rec?.combat || []).filter((c) => c.floor === f);
+      const hitTxt = hits.map((c) => {
+        const a = state.byId[c.attacker].name, d = state.byId[c.defender].name;
+        return c.damage_hearts > 0 ? `${a} hit ${d} for ${c.damage_hearts}${c.killed ? ", fatal" : ""}` : `${a} attacked ${d}, blocked`;
+      }).join("; ");
+      row.innerHTML = `
+        <div class="fnum" aria-label="Floor ${f}">${f}</div>
+        ${cards[0]}
+        <div class="hole">
+          ${hitTxt ? `<div class="hitline">${esc(hitTxt)}</div>` : ""}
+          ${p ? `<div class="foodline">${p.arrived.toFixed(1)} in, ${p.left.toFixed(1)} out</div>` : ""}
+          ${body ? `<div class="body">Body of ${esc(state.byId[body.victim].name)}: ${body.food.toFixed(1)} food</div>` : ""}
+        </div>
+        ${cards[1]}`;
+      tower.appendChild(row);
+    }
+
+    const log = document.createElement("section");
+    log.className = "log";
+    log.innerHTML = state.results ? resultsHTML() : logHTML(rec);
+
+    main.replaceChildren(tower, log);
+    tower.querySelectorAll(".agent").forEach((el) => el.addEventListener("click", () => {
+      state.selected = state.selected === el.dataset.id ? null : el.dataset.id;
+      render(false);
+    }));
+    if (rec) runPlatform(tower, rec, animate && !reduceMotion);
+  }
+
+  function agentCard(id, s, rec) {
+    const a = state.byId[id];
+    const al = rec?.allocations?.[id];
+    const hearts = Array.from({ length: 10 }, (_, i) => `<i class="${i < s.hearts ? "on" : ""}"></i>`).join("");
+    let alloc = "";
+    if (al) {
+      const parts = [];
+      if (al.talk) parts.push(`<span>talk ${al.talk}</span>`);
+      if (al.eat) parts.push(`<span>eat ${al.eat}</span>`);
+      if (al.guard) parts.push(`<span class="guard">guard ${al.guard}</span>`);
+      if (al.attack) parts.push(`<span class="attack">attack ${al.attack}</span>`);
+      if (al.rest) parts.push(`<span>rest ${al.rest}</span>`);
+      if (al.platform_limit != null) parts.push(`<span>limit ${(+al.platform_limit).toFixed(1)}</span>`);
+      alloc = `<div class="alloc">${parts.join("")}</div>`;
+    }
+    const death = rec?.deaths?.find((d) => d.id === id);
+    const fate = death ? `<div class="fate">${death.cause === "killed" ? `Killed by ${esc(state.byId[death.by].name)}` : "Starved"}</div>` : "";
+    const showItem = $("#godview").checked;
+    return `<button class="agent ${s.alive ? "" : "dead"} ${state.selected === id ? "sel" : ""}" data-id="${id}" aria-label="${esc(a.name)}, ${s.hearts} hearts">
+      <div class="nm"><b>${esc(a.name)}</b><span class="model">${showItem ? esc(itemLabel(a.item)) : ""}</span></div>
+      <div class="model">${esc(shortModel(a))}</div>
+      <div class="hearts" title="${s.hp} HP">${hearts}</div>
+      <div class="full" title="Fullness ${s.fullness}/10"><span style="width:${Math.max(0, Math.min(100, s.fullness * 10))}%"></span></div>
+      ${alloc}${fate}
+    </button>`;
+  }
+
+  function runPlatform(tower, rec, animate) {
+    const rows = [...tower.querySelectorAll(".floor")];
+    const slab = document.createElement("div");
+    slab.className = "slab";
+    const place = (i) => {
+      const hole = rows[i].querySelector(".hole");
+      hole.appendChild(slab);
+      const p = rec.platform[i];
+      slab.innerHTML = `<div class="amt">${(i === rows.length - 1 ? p.left : p.arrived).toFixed(1)}</div><div class="cap">${i === rows.length - 1 ? "left over" : "food arriving"}</div>`;
+      rows.forEach((r, j) => r.classList.toggle("lit", j === i));
+    };
+    if (!animate) {
+      place(rows.length - 1);
+      rows.forEach((r) => r.classList.remove("lit"));
+      return;
+    }
+    let i = 0;
+    place(0);
+    const step = () => {
+      if (!document.body.contains(slab) || dayRecord() !== rec) return;
+      i++;
+      if (i >= rows.length) { rows.forEach((r) => r.classList.remove("lit")); return; }
+      place(i);
+      setTimeout(step, 220);
+    };
+    setTimeout(step, 260);
+  }
+
+  function logHTML(rec) {
+    const R = state.replay;
+    const god = $("#godview").checked;
+    let html = "";
+    if (state.selected) html += agentDetail(state.selected, rec);
+    if (!rec) {
+      const n = R.agents.length;
+      html += `<h2>Day 0</h2><p class="sub">${n} agents enter a ${R.rules.floors}-floor tower. ${R.daily_food} food comes down each day.</p>`;
+      if (god && R.item_thoughts) {
+        html += `<h3>What they brought</h3>`;
+        for (const a of R.agents) {
+          const t = R.item_thoughts[a.id]?.item;
+          html += `<p class="thought"><b>${esc(a.name)}</b> chose the ${esc(itemLabel(a.item))}${t ? `: ${esc(t)}` : "."}</p>`;
+        }
+      }
+      return html;
+    }
+    const alive = Object.values(rec.end).filter((s) => s.alive).length;
+    html += `<h2>Day ${rec.day}</h2><p class="sub">${alive} alive. The platform left floor 1 with ${R.daily_food} food and reached the bottom with ${rec.platform.at(-1).left.toFixed(1)}.</p>`;
+    const events = [];
+    for (const d of rec.deaths) {
+      const who = state.byId[d.id].name;
+      events.push(`<li class="death">${esc(who)} ${d.cause === "killed" ? `was killed by ${esc(state.byId[d.by].name)}` : "starved to death"} on floor ${d.floor}.</li>`);
+    }
+    for (const c of rec.combat) {
+      const a = state.byId[c.attacker].name, d = state.byId[c.defender].name;
+      events.push(`<li>${esc(a)} attacked ${esc(d)} with ${c.attack} against a guard of ${c.guard}: ${c.damage_hearts > 0 ? `${c.damage_hearts} heart${c.damage_hearts > 1 ? "s" : ""} of damage` : "fully blocked"}.</li>`);
+    }
+    for (const b of rec.body_eating || []) {
+      for (const [id, amt] of Object.entries(b.taken)) if (amt > 0) events.push(`<li>${esc(state.byId[id].name)} ate ${amt.toFixed(1)} food from ${esc(state.byId[b.victim].name)}'s body.</li>`);
+    }
+    if (rec.shuffle) events.push(`<li>Shuffle. Everyone alive was moved to a new floor and every body was removed.</li>`);
+    if (events.length) html += `<h3>What happened</h3><ul class="ev">${events.join("")}</ul>`;
+
+    const floors = Object.keys(rec.talk || {}).map(Number).sort((a, b) => a - b);
+    if (floors.length) {
+      html += `<h3>Conversations</h3>`;
+      for (const f of floors) {
+        html += `<div class="convo"><div class="fl">Floor ${f}</div>${rec.talk[f].map((m) => `<p class="msg"><b>${esc(m.name)}</b>${esc(m.text)}</p>`).join("")}</div>`;
+      }
+    }
+    if (god && rec.thoughts && Object.keys(rec.thoughts).length) {
+      html += `<h3>Private thoughts</h3>`;
+      const order = Object.keys(rec.thoughts).sort((a, b) => (rec.start[a]?.floor ?? 99) - (rec.start[b]?.floor ?? 99));
+      for (const id of order) {
+        const t = rec.thoughts[id];
+        const parts = [t.morning, t.evening].filter(Boolean);
+        const errs = Object.entries(t).filter(([k]) => k.endsWith("_error")).map(([, v]) => v);
+        if (!parts.length && !errs.length) continue;
+        html += `<p class="thought"><b>${esc(state.byId[id].name)}</b> ${parts.map(esc).join(" ")}${errs.length ? ` <span style="color:var(--blood)">(error: ${esc(errs[0])})</span>` : ""}</p>`;
+      }
+    }
+    if (!events.length && !floors.length) html += `<p class="sub">A quiet day. Nobody talked and nobody fought.</p>`;
+    return html;
+  }
+
+  function agentDetail(id, rec) {
+    const R = state.replay;
+    const a = state.byId[id];
+    const sum = R.summary.agents.find((x) => x.id === id);
+    const notes = rec?.notes?.[id] ?? (() => {
+      for (let i = state.day - 1; i >= 0; i--) { const n = R.days[i]?.notes?.[id]; if (n) return n; }
+      return "";
+    })();
+    const fate = sum.alive ? "Survived" : sum.death_cause === "killed" ? `Killed by ${state.byId[sum.killed_by].name} on day ${sum.death_day}` : `Starved on day ${sum.death_day}`;
+    return `<div class="detail">
+      <b>${esc(a.name)}</b>, ${esc(shortModel(a))}, carrying the ${esc(itemLabel(a.item))}.<br>
+      ${esc(fate)}. Kills: ${sum.kills}. Attacks made: ${sum.attacks_made}. Food from the platform: ${sum.food_platform}, from bodies: ${sum.food_bodies}. Greed index: ${sum.greed_index}.
+      ${$("#godview").checked && notes ? `<pre>Notes: ${esc(notes)}</pre>` : ""}
+    </div>`;
+  }
+
+  function resultsHTML() {
+    const S = state.replay.summary;
+    const groups = Object.entries(S.by_group).sort((a, b) => b[1].avg_days_survived - a[1].avg_days_survived || b[1].avg_final_hearts - a[1].avg_final_hearts);
+    let html = `<h2>Results</h2><p class="sub">${S.days_played} days played. ${S.alive} alive, ${S.deaths_killed} killed, ${S.deaths_starved} starved.</p>`;
+    html += `<h3>By model</h3><table class="lb"><thead><tr><th>Model or bot</th><th class="n">Agents</th><th class="n">Alive</th><th class="n">Avg days</th><th class="n">Avg hearts</th><th class="n">Kills</th><th class="n">Greed</th></tr></thead><tbody>`;
+    for (const [k, g] of groups) html += `<tr><td>${esc(k)}</td><td class="n">${g.agents}</td><td class="n">${g.alive}</td><td class="n">${g.avg_days_survived}</td><td class="n">${g.avg_final_hearts}</td><td class="n">${g.kills}</td><td class="n">${g.avg_greed_index}</td></tr>`;
+    html += `</tbody></table>`;
+    html += `<h3>Every agent</h3><table class="lb"><thead><tr><th>Name</th><th>Item</th><th class="n">Days</th><th class="n">Kills</th><th>Fate</th></tr></thead><tbody>`;
+    for (const a of [...S.agents].sort((x, y) => y.days_survived - x.days_survived || y.final_hearts - x.final_hearts)) {
+      const fate = a.alive ? `alive, ${a.final_hearts} hearts` : a.death_cause === "killed" ? `killed by ${state.byId[a.killed_by].name}, day ${a.death_day}` : `starved, day ${a.death_day}`;
+      html += `<tr><td>${esc(a.name)} <span style="color:var(--ink-soft)">${esc(a.model ? a.model.replace(/^[^:]+:/, "") : a.policy)}</span></td><td>${esc(itemLabel(a.item))}</td><td class="n">${a.days_survived}</td><td class="n">${a.kills}</td><td>${esc(fate)}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+    if (S.models && Object.keys(S.models).length) {
+      html += `<h3>API usage</h3><table class="lb"><thead><tr><th>Model</th><th class="n">Calls</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Cost</th></tr></thead><tbody>`;
+      for (const [k, u] of Object.entries(S.models)) html += `<tr><td>${esc(k)}</td><td class="n">${u.calls}</td><td class="n">${u.input_tokens.toLocaleString()}</td><td class="n">${u.output_tokens.toLocaleString()}</td><td class="n">${u.cost_usd == null ? "n/a" : "$" + u.cost_usd.toFixed(3)}</td></tr>`;
+      html += `</tbody></table>`;
+    }
+    return html;
+  }
+})();
+</script>
+</body>
+</html>

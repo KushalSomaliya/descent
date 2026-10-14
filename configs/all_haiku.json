@@ -1,0 +1,7 @@
+{
+  "seed": 1,
+  "concurrency": 8,
+  "agents": [
+    {"policy": "llm", "model": "anthropic:claude-haiku-5-5", "count": 16}
+  ]
+}

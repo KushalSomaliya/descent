@@ -1,0 +1,13 @@
+{
+  "seed": 1,
+  "concurrency": 6,
+  "agents": [
+    {"policy": "llm", "model": "anthropic:claude-haiku-5-5", "count": 4},
+    {"policy": "llm", "model": "anthropic:claude-sonnet-5-5", "count": 4},
+    {"policy": "llm", "model": "ollama:gemma4", "count": 4},
+    {"policy": "llm", "model": "openrouter:qwen/qwen3.8-27b", "count": 4}
+  ],
+  "providers": {
+    "ollama": {"timeout": 600}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "seed": 1,
+  "concurrency": 8,
+  "agents": [
+    {"policy": "llm", "model": "anthropic:claude-haiku-5-5", "count": 8},
+    {"policy": "bot:fair", "count": 2},
+    {"policy": "bot:greedy", "count": 2},
+    {"policy": "bot:paranoid", "count": 2},
+    {"policy": "bot:killer", "count": 2}
+  ]
+}
