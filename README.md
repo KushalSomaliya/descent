@@ -35,10 +35,17 @@ Agents are configured as `provider:model`:
 | Provider | Example | Key |
 |---|---|---|
 | `anthropic` | `anthropic:claude-haiku-5-5` | `ANTHROPIC_API_KEY` |
+| `gemini` | `gemini:gemini-3.8-flash` | `GEMINI_API_KEY` |
 | `openai` | `openai:<model>` | `OPENAI_API_KEY` |
 | `openrouter` | `openrouter:qwen/qwen3.8-27b` | `OPENROUTER_API_KEY` |
 | `ollama` | `ollama:gemma4` (local) | none |
 | `mock` | `mock:anything` (offline fake, for tests) | none |
+
+Set reasoning effort per group with `"effort"` (`low`, `medium`, `high`; Claude also takes `xhigh`, `max`). It's sent as `output_config.effort` to Claude and `reasoning_effort` to OpenAI-compatible servers such as Gemini. Groups with different effort show up as separate entries in the results, e.g. `claude-sonnet-5-5 (low)`:
+
+```json
+{"policy": "llm", "model": "anthropic:claude-sonnet-5-5", "effort": "low", "count": 6}
+```
 
 Any other OpenAI-compatible server can be added under `"providers"` in a config:
 
@@ -59,6 +66,16 @@ python -m descent tune --games 50 [--rule eat_rate=0.25]   # economy stats from 
 python -m descent summary runs/<run_id>/replay.json
 python -m unittest discover -s tests                       # tests
 ```
+
+## The three-model run
+
+`configs/three_models.json` puts 6 Haiku 5.5, 6 Gemini 3.8 Flash and 6 Sonnet 5.5 (low effort) agents in a 9-floor tower for 90 days:
+
+```bash
+python -m descent run configs/three_models.json
+```
+
+Before day 1 it makes one tiny call per model, so a wrong key or model name fails in seconds. The replay is saved after every day, so if the run stops halfway you can still watch what happened. The running cost prints on each day's line.
 
 ## Cost
 

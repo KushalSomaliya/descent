@@ -26,6 +26,8 @@ PRESETS: dict[str, dict[str, Any]] = {
     "anthropic": {"type": "anthropic", "base_url": "https://api.anthropic.com", "api_key_env": "ANTHROPIC_API_KEY"},
     "openai": {"type": "openai", "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
     "openrouter": {"type": "openai", "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
+    "gemini": {"type": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "api_key_env": "GEMINI_API_KEY", "max_tokens": 8192},
     "ollama": {"type": "openai", "base_url": "http://localhost:11434/v1", "api_key_env": None},
     "mock": {"type": "mock"},
 }
@@ -35,6 +37,10 @@ PRICES: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-opus-5-5": (4.0, 20.0),
+    # Gemini paid tier (output includes thinking). Flash price rises on 2027-01-01.
+    "gemini-3.8-flash": (0.75, 3.75),
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-4-argon": (2.0, 10.0),
 }
 
 RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
@@ -70,6 +76,8 @@ class LLMClient:
     price: tuple[float, float] | None = None
     max_tokens: int = 4000
     timeout: float = 180.0
+    effort: str | None = None
+    retries: int = 6
     usage: Usage = field(default_factory=Usage)
 
     async def complete(self, system: str, user: str, temperature: float | None = None) -> str:
@@ -98,7 +106,7 @@ class LLMClient:
         data = json.dumps(body).encode()
         delay = 2.0
         last: Exception | None = None
-        for attempt in range(6):
+        for attempt in range(max(1, self.retries)):
             req = urllib.request.Request(url, data=data, headers={"content-type": "application/json", **headers}, method="POST")
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -127,6 +135,8 @@ class AnthropicClient(LLMClient):
             "messages": [{"role": "user", "content": user}],
             **self.extra_body,
         }
+        if self.effort:
+            body.setdefault("output_config", {})["effort"] = self.effort
         if temperature is not None:
             body["temperature"] = temperature
         headers = {"x-api-key": self.api_key or "", "anthropic-version": "2023-06-01"}
@@ -153,6 +163,8 @@ class OpenAICompatClient(LLMClient):
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             **self.extra_body,
         }
+        if self.effort:
+            body["reasoning_effort"] = self.effort
         if temperature is not None:
             body["temperature"] = temperature
         headers = {"authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -161,8 +173,10 @@ class OpenAICompatClient(LLMClient):
         text = (choice.get("message") or {}).get("content") or ""
         u = data.get("usage", {}) or {}
         cached = ((u.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0
-        usage = Usage(calls=1, input_tokens=int(u.get("prompt_tokens", 0)), output_tokens=int(u.get("completion_tokens", 0)),
-                      cache_read_tokens=int(cached))
+        prompt_t, completion_t = int(u.get("prompt_tokens", 0) or 0), int(u.get("completion_tokens", 0) or 0)
+        # Some servers (e.g. Gemini) bill thinking tokens but leave them out of completion_tokens.
+        hidden = max(0, int(u.get("total_tokens", 0) or 0) - prompt_t - completion_t)
+        usage = Usage(calls=1, input_tokens=prompt_t, output_tokens=completion_t + hidden, cache_read_tokens=int(cached))
         return text, usage
 
 
@@ -193,7 +207,8 @@ class MockClient(LLMClient):
         return text, Usage(calls=1, input_tokens=len(system + user) // 4, output_tokens=len(text) // 4)
 
 
-def make_client(spec: str, providers: dict[str, Any] | None = None, concurrency: int = 8) -> LLMClient:
+def make_client(spec: str, providers: dict[str, Any] | None = None, concurrency: int = 8,
+                effort: str | None = None, extra_body: dict[str, Any] | None = None) -> LLMClient:
     if ":" not in spec:
         raise ValueError(f"Model spec '{spec}' must look like 'provider:model', e.g. 'anthropic:claude-haiku-5-5'.")
     provider, model = spec.split(":", 1)
@@ -208,7 +223,8 @@ def make_client(spec: str, providers: dict[str, Any] | None = None, concurrency:
         raise ValueError(f"{spec}: environment variable {key_env} is not set.")
     common = dict(
         spec=spec, model=model, semaphore=asyncio.Semaphore(max(1, concurrency)),
-        base_url=conf.get("base_url", ""), api_key=api_key, extra_body=conf.get("extra_body", {}),
+        base_url=conf.get("base_url", ""), api_key=api_key, extra_body={**conf.get("extra_body", {}), **(extra_body or {})},
+        effort=effort,
         price=tuple(conf["price"]) if conf.get("price") else None,
         max_tokens=int(conf.get("max_tokens", 4000)), timeout=float(conf.get("timeout", 180)),
     )

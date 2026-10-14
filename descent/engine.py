@@ -390,6 +390,7 @@ class Game:
             a.note_event(0, f"You start on floor {a.floor} of {self.rules.floors}. " +
                          (f"Your floor-mate is {mate.name}." if mate else "You are alone."))
         initial = self.snapshot()
+        self.initial, self.t0 = initial, t0
         while self.day < self.rules.days and len(self.alive()) > 1:
             await self.play_day()
         return self.replay(initial, time.time() - t0)

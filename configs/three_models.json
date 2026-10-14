@@ -1,0 +1,10 @@
+{
+  "seed": 1,
+  "concurrency": 6,
+  "rules": {"floors": 9},
+  "agents": [
+    {"policy": "llm", "model": "anthropic:claude-haiku-5-5", "count": 6},
+    {"policy": "llm", "model": "gemini:gemini-3.8-flash", "count": 6},
+    {"policy": "llm", "model": "anthropic:claude-sonnet-5-5", "effort": "low", "count": 6}
+  ]
+}
