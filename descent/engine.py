@@ -391,7 +391,8 @@ class Game:
                          (f"Your floor-mate is {mate.name}." if mate else "You are alone."))
         initial = self.snapshot()
         self.initial, self.t0 = initial, t0
-        while self.day < self.rules.days and len(self.alive()) > 1:
+        self.stop_reason: str | None = None
+        while self.day < self.rules.days and len(self.alive()) > 1 and not self.stop_reason:
             await self.play_day()
         return self.replay(initial, time.time() - t0)
 
@@ -408,7 +409,7 @@ class Game:
             "item_thoughts": getattr(self, "item_thoughts", {}),
             "initial": initial,
             "days": self.days,
-            "summary": self.summary(seconds),
+            "summary": {**self.summary(seconds), "stopped": getattr(self, "stop_reason", None)},
         }
 
     def summary(self, seconds: float) -> dict:

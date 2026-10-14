@@ -29,6 +29,8 @@ def _rule_overrides(pairs: list[str]) -> dict:
 def print_summary(replay: dict) -> None:
     s = replay["summary"]
     print(f"\nDays played: {s['days_played']}   alive: {s['alive']}   killed: {s['deaths_killed']}   starved: {s['deaths_starved']}")
+    if s.get("stopped"):
+        print(f"Stopped early: {s['stopped']}")
     print(f"\n{'name':<8}{'model / policy':<34}{'item':<14}{'days':>5}{'hearts':>7}{'kills':>6}{'greed':>7}{'invalid':>8}  fate")
     for a in sorted(s["agents"], key=lambda a: (-a["days_survived"], -a["final_hearts"])):
         fate = "alive" if a["alive"] else f"{a['death_cause']} day {a['death_day']}"

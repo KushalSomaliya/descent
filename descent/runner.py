@@ -51,6 +51,8 @@ def build_game(cfg: dict[str, Any], on_day=None) -> Game:
                 if label not in llm_clients:
                     llm_clients[label] = make_client(spec, cfg.get("providers", {}), int(cfg.get("concurrency", 8)),
                                                      effort=effort, extra_body=group.get("extra_body"))
+                    if group.get("max_cost_usd") is not None:
+                        llm_clients[label].max_cost_usd = float(group["max_cost_usd"])
                 pol = LLMPolicy(llm_clients[label], temperature=group.get("temperature"))
                 pol.model = label
                 model = label
@@ -118,8 +120,28 @@ async def run_config(cfg: dict[str, Any], out_dir: str | Path | None = "runs", v
         replay["summary"]["models"] = model_usage(game)
         return replay
 
+    max_errors = int(cfg.get("stop_after_consecutive_errors", 6))
+    budget = cfg.get("budget_usd")
+
+    def check_limits(game: Game) -> None:
+        clients = getattr(game, "llm_clients", {})
+        for label, c in clients.items():
+            if c.consecutive_errors >= max_errors:
+                game.stop_reason = (f"{label} failed {c.consecutive_errors} calls in a row "
+                                    f"(credit or rate limit?). Days after this would be fallback moves, so the run stopped.")
+                return
+            cost = c.cost_usd()
+            if c.max_cost_usd is not None and cost is not None and cost >= c.max_cost_usd:
+                game.stop_reason = f"{label} reached its ${c.max_cost_usd:g} cap (${cost:.2f})."
+                return
+        if budget is not None:
+            total = sum(c.cost_usd() or 0 for c in clients.values())
+            if total >= float(budget):
+                game.stop_reason = f"Total spend reached the ${float(budget):g} budget (${total:.2f})."
+
     def progress(day: dict) -> None:
         game = game_ref["g"]
+        check_limits(game)
         save(snapshot_replay(game))  # a crash or Ctrl-C still leaves a watchable replay
         if not verbose:
             return
@@ -135,6 +157,8 @@ async def run_config(cfg: dict[str, Any], out_dir: str | Path | None = "runs", v
         if any(c is not None for c in costs):
             bits.append(f"${sum(c or 0 for c in costs):.2f} so far")
         print("  ".join(bits), flush=True)
+        if game.stop_reason:
+            print(f"STOPPED after day {day['day']}: {game.stop_reason}", flush=True)
 
     game = build_game(cfg, on_day=progress)
     game_ref["g"] = game

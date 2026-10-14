@@ -78,6 +78,8 @@ class LLMClient:
     timeout: float = 180.0
     effort: str | None = None
     retries: int = 6
+    max_cost_usd: float | None = None
+    consecutive_errors: int = 0
     usage: Usage = field(default_factory=Usage)
 
     async def complete(self, system: str, user: str, temperature: float | None = None) -> str:
@@ -87,7 +89,9 @@ class LLMClient:
                 text, u = await asyncio.to_thread(self._complete_sync, system, user, temperature)
             except Exception:
                 self.usage.errors += 1
+                self.consecutive_errors += 1
                 raise
+            self.consecutive_errors = 0
             u.seconds = time.time() - t0
             self.usage.add(u)
             return text

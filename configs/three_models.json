@@ -2,9 +2,10 @@
   "seed": 1,
   "concurrency": 6,
   "rules": {"floors": 9},
+  "budget_usd": 30,
   "agents": [
     {"policy": "llm", "model": "anthropic:claude-haiku-5-5", "count": 6},
-    {"policy": "llm", "model": "gemini:gemini-3.8-flash", "count": 6},
+    {"policy": "llm", "model": "gemini:gemini-3.8-flash", "effort": "low", "count": 6, "max_cost_usd": 5},
     {"policy": "llm", "model": "anthropic:claude-sonnet-5-5", "effort": "low", "count": 6}
   ]
 }

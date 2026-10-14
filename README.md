@@ -77,6 +77,14 @@ python -m descent run configs/three_models.json
 
 Before day 1 it makes one tiny call per model, so a wrong key or model name fails in seconds. The replay is saved after every day, so if the run stops halfway you can still watch what happened. The running cost prints on each day's line.
 
+## Spending limits
+
+- `"budget_usd": 5` at the top of a config stops the run once total spend reaches $5.
+- `"max_cost_usd": 5` on an agent group caps that one model.
+- If a model fails 6 calls in a row (credit ran out, rate limit), the run stops instead of continuing with fallback moves. Change the count with `"stop_after_consecutive_errors"`.
+
+A stopped run still saves its replay up to the last full day, and the summary says why it stopped.
+
 ## Cost
 
 Each agent makes about 3–4 calls a day (morning, its messages, evening). A full 16-agent, 90-day game is roughly 5,000 calls. With Haiku 5.5 that's in the low single-digit dollars; check the "API usage" section printed after each run. Start with `--days 5`.
