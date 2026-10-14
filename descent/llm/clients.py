@@ -11,12 +11,16 @@ Model specs look like "provider:model", e.g.
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import hashlib
 import json
 import os
 import random
 import re
+import sys
+import threading
 import time
+from datetime import datetime, timezone
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -80,6 +84,9 @@ class LLMClient:
     retries: int = 6
     max_cost_usd: float | None = None
     consecutive_errors: int = 0
+    rate_limit_max_wait: float = 900.0
+    _pause_until: float = 0.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     usage: Usage = field(default_factory=Usage)
 
     async def complete(self, system: str, user: str, temperature: float | None = None) -> str:
@@ -110,10 +117,18 @@ class LLMClient:
 
     # ---- HTTP with retries ----
     def _post(self, url: str, headers: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
+        """POST with retries.
+
+        Rate limits (429) and overload (5xx/529) are waited out, using the server's own reset hints, for up to
+        `rate_limit_max_wait` seconds in total. The whole client pauses while one request is rate-limited, so the
+        other parallel requests don't keep hammering. Network errors get `retries` attempts.
+        """
         data = json.dumps(body).encode()
-        delay = 2.0
-        last: Exception | None = None
-        for attempt in range(max(1, self.retries)):
+        backoff = 2.0
+        network_attempts = 0
+        deadline = time.time() + self.rate_limit_max_wait
+        while True:
+            self._wait_for_pause()
             req = urllib.request.Request(url, data=data, headers={"content-type": "application/json", **headers}, method="POST")
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -122,15 +137,95 @@ class LLMClient:
                 detail = e.read().decode(errors="replace")[:500]
                 if e.code not in RETRY_STATUS:
                     raise LLMError(f"{self.spec}: HTTP {e.code}: {detail}") from e
-                last = LLMError(f"{self.spec}: HTTP {e.code}: {detail}")
-                retry_after = e.headers.get("retry-after") if e.headers else None
-                wait = float(retry_after) if retry_after and retry_after.replace(".", "").isdigit() else delay
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-                last = LLMError(f"{self.spec}: {e}")
-                wait = delay
-            time.sleep(min(wait, 60.0) + random.random())
-            delay *= 2
-        raise last or LLMError(f"{self.spec}: request failed")
+                hint = retry_hint_seconds(e.headers, detail)
+                wait = hint if hint is not None else backoff
+                wait = min(max(wait, 0.5), 120.0) + random.uniform(0, 1.0)
+                if time.time() + wait > deadline:
+                    raise LLMError(f"{self.spec}: still rate-limited or overloaded after "
+                                   f"{self.rate_limit_max_wait:.0f}s: HTTP {e.code}: {detail}") from e
+                if e.code == 429:
+                    self._pause(wait)
+                log(f"{self.spec}: HTTP {e.code} ({'rate limit' if e.code == 429 else 'busy'}), waiting {wait:.0f}s")
+                time.sleep(wait if e.code != 429 else 0)
+                backoff = min(backoff * 2, 60.0)
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+                network_attempts += 1
+                if network_attempts >= max(1, self.retries):
+                    raise LLMError(f"{self.spec}: {e}") from e
+                time.sleep(min(backoff, 60.0) + random.random())
+                backoff = min(backoff * 2, 60.0)
+
+    def _pause(self, seconds: float) -> None:
+        with self._lock:
+            self._pause_until = max(self._pause_until, time.time() + seconds)
+
+    def _wait_for_pause(self) -> None:
+        while True:
+            with self._lock:
+                remaining = self._pause_until - time.time()
+            if remaining <= 0:
+                return
+            time.sleep(remaining)
+
+
+def log(msg: str) -> None:
+    print(f"  [api] {msg}", file=sys.stderr, flush=True)
+
+
+_DURATION_RE = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+
+
+def _parse_duration(text: str) -> float | None:
+    """'1s', '6m0s', '20ms', '12.5s', '30' -> seconds."""
+    text = text.strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    parts = _DURATION_RE.findall(text)
+    if not parts:
+        return None
+    mult = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
+    return sum(float(n) * mult[u] for n, u in parts)
+
+
+def retry_hint_seconds(headers: Any, body: str = "") -> float | None:
+    """How long the server asks us to wait, from any of the common rate-limit hints."""
+    hints: list[float] = []
+    get = (lambda k: headers.get(k)) if headers is not None else (lambda k: None)
+    if (v := get("retry-after-ms")):
+        try:
+            hints.append(float(v) / 1000)
+        except ValueError:
+            pass
+    if (v := get("retry-after")):
+        d = _parse_duration(v)
+        if d is None:
+            try:
+                d = (email.utils.parsedate_to_datetime(v) - datetime.now(timezone.utc)).total_seconds()
+            except (TypeError, ValueError):
+                d = None
+        if d is not None:
+            hints.append(d)
+    if not hints:
+        # OpenAI-style "6m0s" reset durations, then Anthropic-style RFC 3339 reset timestamps.
+        for k in ("x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"):
+            if (v := get(k)) and (d := _parse_duration(v)) is not None:
+                hints.append(d)
+        for k in ("anthropic-ratelimit-requests-reset", "anthropic-ratelimit-tokens-reset",
+                  "anthropic-ratelimit-input-tokens-reset", "anthropic-ratelimit-output-tokens-reset"):
+            if (v := get(k)):
+                try:
+                    hints.append((datetime.fromisoformat(v.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds())
+                except ValueError:
+                    pass
+    if not hints and body:
+        # Gemini puts it in the error body: "retryDelay": "12s"
+        m = re.search(r'"retryDelay"\s*:\s*"([^"]+)"', body)
+        if m and (d := _parse_duration(m.group(1))) is not None:
+            hints.append(d)
+    hints = [h for h in hints if h > 0]
+    return max(hints) if hints else None
 
 
 class AnthropicClient(LLMClient):

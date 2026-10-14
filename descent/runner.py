@@ -6,6 +6,7 @@ import asyncio
 import json
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ def build_game(cfg: dict[str, Any], on_day=None) -> Game:
                 effort = group.get("effort")
                 label = group.get("label") or (f"{spec} ({effort})" if effort else spec)
                 if label not in llm_clients:
-                    llm_clients[label] = make_client(spec, cfg.get("providers", {}), int(cfg.get("concurrency", 8)),
+                    llm_clients[label] = make_client(spec, cfg.get("providers", {}), int(cfg.get("concurrency", 16)),
                                                      effort=effort, extra_body=group.get("extra_body"))
                     if group.get("max_cost_usd") is not None:
                         llm_clients[label].max_cost_usd = float(group["max_cost_usd"])
@@ -160,6 +161,8 @@ async def run_config(cfg: dict[str, Any], out_dir: str | Path | None = "runs", v
         if game.stop_reason:
             print(f"STOPPED after day {day['day']}: {game.stop_reason}", flush=True)
 
+    # Plenty of threads so every agent's call can be in flight at once (HTTP waits, not CPU).
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=64))
     game = build_game(cfg, on_day=progress)
     game_ref["g"] = game
     if check_models and getattr(game, "llm_clients", None):

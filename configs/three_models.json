@@ -1,6 +1,6 @@
 {
   "seed": 1,
-  "concurrency": 6,
+  "concurrency": 12,
   "rules": {"floors": 9},
   "budget_usd": 30,
   "agents": [
