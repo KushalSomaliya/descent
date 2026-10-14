@@ -17,12 +17,14 @@ Python 3.10+ and nothing else. No packages to install.
 python -m descent run configs/bots.json
 
 # Claude Haiku 5.5 agents vs scripted bots
-export ANTHROPIC_API_KEY=sk-ant-...
+cp .env.example .env        # then put your ANTHROPIC_API_KEY in .env
 python -m descent run configs/haiku_vs_bots.json
 
 # Try a short game first to check cost and behaviour
 python -m descent run configs/all_haiku.json --days 5
 ```
+
+API keys are read from `.env` in the folder you run from (git-ignored). Keys already exported in your shell take priority. Use `--env path/to/.env` to point somewhere else.
 
 Then open `viewer/index.html` in a browser and load `runs/<run_id>/replay.json` (or drop the file on the page).
 

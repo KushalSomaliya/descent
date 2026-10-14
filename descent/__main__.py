@@ -68,9 +68,14 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("summary", help="print the summary of a replay file")
     s.add_argument("replay")
 
+    r.add_argument("--env", help="path to a .env file (default: ./.env)")
+
     args = ap.parse_args(argv)
 
     if args.cmd == "run":
+        from .env import load_dotenv
+
+        load_dotenv(args.env)
         from .runner import run_config
 
         cfg = json.loads(Path(args.config).read_text())
