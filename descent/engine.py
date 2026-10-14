@@ -61,12 +61,19 @@ class Game:
         return agent.hearts(self.rules.hp_per_heart)
 
     def assign_floors(self) -> None:
-        slots = [f for f in range(1, self.rules.floors + 1) for _ in range(self.rules.agents_per_floor)]
-        self.rng.shuffle(slots)
+        """Group living agents into full floors (pairs by default), then put each group on a random floor.
+
+        Floors can end up empty anywhere in the tower (e.g. floor 5 empty, floor 6 full).
+        Only when the number of living agents is odd does one agent end up alone.
+        """
+        per = self.rules.agents_per_floor
         living = sorted(self.alive(), key=lambda a: a.id)
         self.rng.shuffle(living)
-        for agent, floor in zip(living, slots):
-            agent.floor = floor
+        groups = [living[i : i + per] for i in range(0, len(living), per)]
+        floors = self.rng.sample(range(1, self.rules.floors + 1), len(groups))
+        for group, floor in zip(groups, floors):
+            for agent in group:
+                agent.floor = floor
 
     def observe(self, agent: Agent, start_hearts: dict[str, int]) -> Observation:
         mate = self.mate_of(agent)

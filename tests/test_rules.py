@@ -206,6 +206,34 @@ class EngineTests(unittest.TestCase):
         day3_deaths = {d["id"] for d in replay["days"][2]["deaths"]}
         self.assertTrue(all(b["victim"] in day3_deaths for b in day3_bodies))
 
+    def test_shuffle_pairs_survivors_on_any_floors(self):
+        r = Rules(floors=8, agents_per_floor=2)
+        for n_alive in (16, 9, 6, 3):
+            for seed in range(20):
+                agents = [Agent(id=f"x{i}", name=f"X{i}", policy_name="t") for i in range(16)]
+                for a in agents[n_alive:]:
+                    a.alive = False
+                game = Game(r, agents, {a.id: Scripted() for a in agents}, seed=seed)
+                game.assign_floors()
+                counts: dict[int, int] = {}
+                for a in game.alive():
+                    counts[a.floor] = counts.get(a.floor, 0) + 1
+                self.assertTrue(all(c <= 2 for c in counts.values()))
+                self.assertEqual(sum(1 for c in counts.values() if c == 1), n_alive % 2)
+                self.assertEqual(len(counts), (n_alive + 1) // 2)
+
+    def test_shuffle_can_leave_gaps(self):
+        r = Rules(floors=8, agents_per_floor=2)
+        seen_gap = False
+        for seed in range(30):
+            agents = [Agent(id=f"x{i}", name=f"X{i}", policy_name="t") for i in range(6)]
+            game = Game(r, agents, {a.id: Scripted() for a in agents}, seed=seed)
+            game.assign_floors()
+            used = sorted({a.floor for a in agents})
+            if used != [1, 2, 3]:
+                seen_gap = True
+        self.assertTrue(seen_gap)
+
     def test_deterministic_with_seed(self):
         cfg = {"seed": 4, "rules": {"days": 20}, "agents": [{"policy": "bot:random", "count": 8}, {"policy": "bot:killer", "count": 8}]}
         r1 = asyncio.run(build_game(cfg).run())["summary"]["agents"]
