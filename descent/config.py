@@ -31,7 +31,7 @@ class Rules:
     overflow_hp_per_food: float = 3.0
 
     # Food
-    food_ratio: float = 1.1  # daily food = start_population * hunger_decay * food_ratio
+    food_ratio: float = 0.6  # daily food = start_population * hunger_decay * food_ratio
 
     # Eating
     ticks_per_floor: int = 6

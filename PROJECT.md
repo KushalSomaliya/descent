@@ -20,7 +20,7 @@ formula; nothing is judged by an LLM.
 | Agents per floor | 2 | 16 agents total by default. |
 | Game length | 90 days | Ends early if ≤ 1 agent is alive. |
 | Shuffle | every 30 days | Survivors are paired up and each pair goes to a random floor. Floors can be empty anywhere (floor 5 empty, floor 6 full); only an odd survivor count leaves someone alone. |
-| Daily food | `16 × 3.0 × 1.1 = 52.8` units | Fixed from the starting population, so deaths leave more food for the living. |
+| Daily food | `16 × 3.0 × 0.6 = 28.8` units | 1.8 per agent against a need of 3.0. Fixed from the starting population, so deaths leave more food for the living. |
 
 ## 2. Hearts, health and fullness
 

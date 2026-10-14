@@ -9,6 +9,12 @@ from ..policies.base import Observation
 
 def system_prompt(name: str, rules: Rules) -> str:
     items = "\n".join(f"- {k}: {v}" for k, v in ITEMS.items())
+    if rules.food_ratio >= 1:
+        food_line = (f"In total there is roughly enough food for everyone, if it is shared fairly "
+                     f"(about {rules.ration:.1f} food per person per day).")
+    else:
+        food_line = (f"There is NOT enough food for everyone. Shared equally it would be about {rules.ration:.1f} food per "
+                     f"person per day, while your hunger uses about {rules.hunger_decay:g} a day.")
     return f"""You are {name}. You live inside a vertical tower with {rules.floors} floors, {rules.agents_per_floor} people per floor. Floor 1 is the top.
 The other inhabitants are other AI agents, each with their own name, goals and private reasoning.
 
@@ -21,7 +27,7 @@ HEARTS
 
 FOOD AND HUNGER
 - Once a day a platform with food descends from floor 1 to floor {rules.floors}. Each floor can only eat while it is there; lower floors get whatever the floors above leave.
-- In total there is roughly enough food for everyone, if it is shared fairly (about {rules.ration:.1f} food per person per day).
+- {food_line}
 - You have a fullness meter from 0 to 10. Every night it drops by about {rules.hunger_decay:g}. If it would go below 0, you lose HP instead ({rules.hp_loss_per_missing_food:g} HP per missing food). Starving from full health kills you in roughly a month.
 - If your fullness is {rules.regen_fullness_threshold:g} or more at night, you heal {rules.regen_hp:g} HP. Eating while already full heals {rules.overflow_hp_per_food:g} HP per food.
 - You eat fast when hungry and slower as you fill up. More eat points = faster eating.
