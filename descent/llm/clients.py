@@ -292,7 +292,7 @@ class MockClient(LLMClient):
         budget_m = re.search(r"You have (\d+) point", user)
         budget = int(budget_m.group(1)) if budget_m else 10
         if kind == "ITEM":
-            out = {"item": rng.choice(["helmet", "knife", "blanket", "mirror", "megaphone", "first_aid_kit"]),
+            out = {"item": rng.choice(["helmet", "knife", "blanket", "salt", "megaphone", "first_aid_kit"]),
                    "thought": "Picking something useful."}
         elif kind == "MORNING":
             out = {"talk_points": 0 if "alone on this floor" in user else rng.randint(0, 2), "thought": "Let's see."}

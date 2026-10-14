@@ -58,7 +58,8 @@ class Rules:
     helmet_guard_bonus: int = 2
     blanket_decay_reduction: float = 0.6
     spoon_eat_multiplier: float = 1.3
-    first_aid_hp: float = 2.0
+    first_aid_charges: int = 3
+    first_aid_heal_hp: float = 20.0
 
     @property
     def start_population(self) -> int:

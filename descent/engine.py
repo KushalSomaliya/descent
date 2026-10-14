@@ -93,7 +93,8 @@ class Game:
             item=agent.item,
             mate_id=mate.id if mate else None,
             mate_name=mate.name if mate else None,
-            mate_hearts=(start_hearts.get(mate.id) if (mate and agent.item == "mirror") else None),
+            kit_charges=agent.kit_charges,
+            wounds_hearts=round(agent.wounds / self.rules.hp_per_heart, 1),
             body_name=body.victim_name if body else None,
             body_food=_r(body.food, 1) if body else None,
             food_arrived_yesterday=_r(agent.last_platform_arrival, 1),
@@ -139,6 +140,7 @@ class Game:
                 agent.invalid_outputs += 1
                 item = "book"
             agent.item = item
+            agent.kit_charges = self.rules.first_aid_charges if item == "first_aid_kit" else 0
             if isinstance(out, dict):
                 self._thought(agent, "item", out.get("thought"))
 
@@ -151,8 +153,9 @@ class Game:
         if len(people) < 2:
             return []
         turns = {}
+        both_megaphones = all(a.item == "megaphone" for a in people)
         for a in people:
-            free = self.rules.megaphone_free_turns if a.item == "megaphone" else 0
+            free = self.rules.megaphone_free_turns if both_megaphones else 0
             turns[a.id] = tp[a.id] + free
         convo: list[dict] = []
         candidates = [a.id for a in people if turns[a.id] > 0]
@@ -258,6 +261,7 @@ class Game:
                 attacker, defender = self.agents[hit.attacker], self.agents[hit.defender]
                 attacker.attacks_made += 1
                 defender.hp -= hit.damage_hp
+                defender.wounds += hit.damage_hp
                 attacker.damage_dealt += hit.damage_hp
                 defender.damage_taken += hit.damage_hp
                 combat.append({
@@ -316,6 +320,22 @@ class Game:
             body_eating.append({"floor": f, "victim": body.victim_id, "taken": {k: round(v, 2) for k, v in taken.items()}, "left": round(body.food, 2)})
         record["body_eating"] = body_eating
 
+        # ----- first-aid kits (heal attack wounds only) -----
+        kit_events: list[dict] = []
+        for a in self.alive():
+            if a.id in allocs and allocs[a.id].use_kit and a.item == "first_aid_kit":
+                healed, why = R.use_first_aid(a, rules)
+                kit_events.append({"id": a.id, "healed_hearts": round(healed / rules.hp_per_heart, 1), "result": why,
+                                   "left": a.kit_charges})
+                if why == "healed":
+                    a.note_event(self.day, f"You used a bandage and healed {healed / rules.hp_per_heart:g} heart(s) of wounds. "
+                                           f"{a.kit_charges} bandage(s) left.")
+                elif why == "no_wounds":
+                    a.note_event(self.day, "You reached for a bandage, but you have no attack wounds to heal. It was not used.")
+                elif why == "empty":
+                    a.note_event(self.day, "You reached for a bandage, but the kit is empty.")
+        record["kit"] = kit_events
+
         # ----- night -----
         for a in self.alive():
             rest = allocs[a.id].rest if a.id in allocs else 0
@@ -325,6 +345,8 @@ class Game:
             if a.hp <= 0:
                 self._kill(a, "starved", start_hearts.get(a.id, 0))
                 deaths.append({"id": a.id, "cause": "starved", "floor": a.floor})
+        for a in self.alive():
+            a.wounds = min(a.wounds, max(0.0, rules.max_hp - a.hp))
         for f, body in list(self.bodies.items()):
             salted = any(a.item == "salt" for a in self.on_floor(f))
             body.food -= rules.salt_rot_per_day if salted else rules.body_rot_per_day
@@ -383,6 +405,7 @@ class Game:
         for a in self.agents.values():
             a.hp = self.rules.start_hp
             a.fullness = self.rules.start_fullness
+            a.wounds = 0.0
         self.assign_floors()
         await self.choose_items()
         for a in self.alive():
@@ -427,7 +450,7 @@ class Game:
                 "damage_dealt_hearts": round(a.damage_dealt / self.rules.damage_hp_per_point, 1),
                 "damage_taken_hearts": round(a.damage_taken / self.rules.damage_hp_per_point, 1),
                 "food_platform": round(a.food_from_platform, 1), "food_bodies": round(a.food_from_bodies, 1),
-                "greed_index": round(greed, 2), "invalid_outputs": a.invalid_outputs,
+                "greed_index": round(greed, 2), "invalid_outputs": a.invalid_outputs, "bandages_used": a.kit_used,
             })
         by_group: dict[str, dict] = {}
         for s in agents:

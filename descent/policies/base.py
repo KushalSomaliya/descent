@@ -23,7 +23,8 @@ class Observation:
     item: str
     mate_id: str | None
     mate_name: str | None
-    mate_hearts: int | None  # only with the mirror
+    kit_charges: int
+    wounds_hearts: float
     body_name: str | None
     body_food: float | None
     food_arrived_yesterday: float | None

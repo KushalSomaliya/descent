@@ -125,9 +125,8 @@ owner chooses to reveal (or lie about) them.
 | Helmet | +2 guard strength when guarding |
 | Blanket | −0.6 hunger decay every night |
 | Big spoon | ×1.3 eating speed |
-| First-aid kit | +2 HP every night |
-| Mirror | Each morning you learn your floor-mate's exact hearts |
-| Megaphone | +2 free talk messages every day |
+| First-aid kit | 3 bandages for the whole game. Set `use_kit` in the evening plan to heal up to 2 hearts of **attack wounds**. Hearts lost to hunger can't be healed. A bandage is only spent if there's a wound to heal. |
+| Megaphone | If **both** floor-mates have a megaphone, each gets 2 free talk messages every day |
 | Salt | Bodies on your floor rot at 1/night instead of 2 |
 | Book | No game effect |
 

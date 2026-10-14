@@ -47,7 +47,8 @@ class FairBot(BotPolicy):
     async def evening(self, obs: Observation) -> dict[str, Any]:
         budget = obs.hearts - obs.talk_points
         guard = 0 if obs.alone else min(3, budget // 3)
-        return {"eat": budget - guard, "guard": guard, "platform_limit": round(obs.rules.ration, 2)}
+        return {"eat": budget - guard, "guard": guard, "platform_limit": round(obs.rules.ration, 2),
+                "use_kit": obs.wounds_hearts >= 2}
 
 
 class ParanoidBot(BotPolicy):

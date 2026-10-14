@@ -134,8 +134,6 @@ def night(agent: Agent, rest_points: int, rules: Rules) -> NightResult:
     if agent.hp > 0:
         if agent.fullness >= rules.regen_fullness_threshold:
             regen += rules.regen_hp
-        if agent.item == "first_aid_kit":
-            regen += rules.first_aid_hp
         before = agent.hp
         agent.hp = min(rules.max_hp, agent.hp + regen)
         regen = agent.hp - before
@@ -180,4 +178,21 @@ def clamp_allocation(raw: dict, budget: int, talk_used: int) -> tuple[Allocation
             plimit = max(0.0, float(limit))
         except (TypeError, ValueError):
             plimit, valid = None, False
-    return Allocation(talk=talk_used, platform_limit=plimit, **vals), valid
+    use_kit = bool(raw.get("use_kit")) if isinstance(raw, dict) and raw.get("use_kit") not in ("false", "no", "0") else False
+    return Allocation(talk=talk_used, platform_limit=plimit, use_kit=use_kit, **vals), valid
+
+
+def use_first_aid(agent: Agent, rules: Rules) -> tuple[float, str]:
+    """Spend one bandage on wounds. Returns (hp_healed, reason). Hunger damage is never healed."""
+    if agent.item != "first_aid_kit":
+        return 0.0, "no_kit"
+    if agent.kit_charges <= 0:
+        return 0.0, "empty"
+    heal = min(rules.first_aid_heal_hp, agent.wounds, max(0.0, rules.max_hp - agent.hp))
+    if heal <= 1e-9:
+        return 0.0, "no_wounds"
+    agent.hp += heal
+    agent.wounds -= heal
+    agent.kit_charges -= 1
+    agent.kit_used += 1
+    return heal, "healed"

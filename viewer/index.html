@@ -169,6 +169,7 @@ button { cursor: pointer; }
 .chip.attack { background: var(--blood); color: #fff; }
 .chip.guard { background: var(--guard); color: #fff; }
 .chip.eat { background: var(--food); color: var(--food-ink); }
+.chip.kit { background: #f2f0ea; color: var(--blood); }
 .agent.dead .av { background: #6b665d !important; transform: rotate(90deg) scaleY(.82); }
 .agent.dead .hearts, .agent.dead .belly, .agent.dead .chips { display: none; }
 .agent.dead .nm b { text-decoration: line-through; }
@@ -299,6 +300,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     <symbol id="i-plat" viewBox="0 0 16 16"><path fill="currentColor" d="M1 10h14v3H1zM4 6a4 4 0 0 1 8 0v3H4z"/></symbol>
     <symbol id="i-lock" viewBox="0 0 16 16"><path fill="currentColor" d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z"/></symbol>
     <symbol id="i-skull" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a6 6 0 0 0-6 6c0 2 1 3 2 4v3h2v-2h1v2h2v-2h1v2h2v-3c1-1 2-2 2-4a6 6 0 0 0-6-6zM5.5 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></symbol>
+    <symbol id="i-kit" viewBox="0 0 16 16"><path fill="currentColor" d="M6 1h4v5h5v4h-5v5H6v-5H1V6h5z"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 16 16"><path fill="currentColor" d="M11 2l3 3-3 3V6H9L5 11H2V9h2l4-5h3zm0 6l3 3-3 3v-2H8l-1.3-1.6 1.3-1.6L9 10h2z"/></symbol>
   </defs>
 </svg>
@@ -603,6 +605,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     if (al.guard) out.push(`<span class="chip guard">${icon("guard")}${al.guard}</span>`);
     if (al.attack) out.push(`<span class="chip attack">${icon("attack")}${al.attack}</span>`);
     if (al.rest) out.push(`<span class="chip">${icon("rest")}${al.rest}</span>`);
+    if (al.use_kit) out.push(`<span class="chip kit">${icon("kit")}</span>`);
     return out.join("");
   }
 
@@ -821,7 +824,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
       const al = rec.allocations[id];
       const segs = [["eat", "var(--food)"], ["guard", "var(--guard)"], ["attack", "var(--blood)"], ["rest", "var(--ink-3)"], ["talk", "var(--seam)"]];
       const bar = segs.map(([k, c]) => al[k] ? `<span style="flex:${al[k]};background:${c}" title="${k} ${al[k]}"></span>` : "").join("");
-      const words = segs.filter(([k]) => al[k]).map(([k]) => `${k} ${al[k]}`).join(", ");
+      const words = segs.filter(([k]) => al[k]).map(([k]) => `${k} ${al[k]}`).join(", ") + (al.use_kit ? ", bandage" : "");
       const th = god ? rec.thoughts?.[id]?.evening : null;
       html += `<div class="plan">${dotFor(id)}<span>${esc(nameOf(id))}</span><div><div class="bar10" aria-label="${words}">${bar}</div><span class="muted">${words}${al.platform_limit != null ? `, takes at most ${(+al.platform_limit).toFixed(1)}` : ""}</span>${th ? `<p class="thought">${icon("lock")}${esc(th)}</p>` : ""}</div></div>`;
     }
@@ -855,6 +858,11 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     if (cls("night") === "later") html += future("night", "rest", "Night");
     else {
     html += `<div class="sec ${cls("night")}" data-k="night"><h3>${icon("rest")}Night</h3><ul class="ev">`;
+    for (const k of rec.kit || []) {
+      const msg = k.result === "healed" ? `used a bandage and healed ${k.healed_hearts} heart${k.healed_hearts === 1 ? "" : "s"} of wounds. ${k.left} left.`
+        : k.result === "no_wounds" ? "reached for a bandage but had no attack wounds to heal." : "reached for a bandage, but the kit is empty.";
+      html += `<li>${dotFor(k.id)}<p>${esc(nameOf(k.id))} ${msg}</p></li>`;
+    }
     const starved = rec.deaths.filter((d) => d.cause === "starved");
     for (const d of starved) html += `<li class="death">${dotFor(d.id)}<p>${esc(nameOf(d.id))} starved to death on floor ${d.floor}.</p></li>`;
     const changes = Object.keys(rec.end).filter((id) => rec.start[id]?.alive && rec.end[id].alive && rec.end[id].hearts !== rec.start[id].hearts);

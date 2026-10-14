@@ -33,6 +33,9 @@ class Agent:
     attacks_made: int = 0
     invalid_outputs: int = 0
     last_platform_arrival: float | None = None
+    wounds: float = 0.0          # HP lost to attacks and not yet healed (the first-aid kit only heals this)
+    kit_charges: int = 0
+    kit_used: int = 0
 
     def hearts(self, hp_per_heart: float = 10.0) -> int:
         if self.hp <= 0:
@@ -63,9 +66,11 @@ class Allocation:
     attack: int = 0
     rest: int = 0
     platform_limit: float | None = None
+    use_kit: bool = False
 
     def to_dict(self) -> dict:
         return {
+            "use_kit": self.use_kit,
             "talk": self.talk,
             "eat": self.eat,
             "guard": self.guard,

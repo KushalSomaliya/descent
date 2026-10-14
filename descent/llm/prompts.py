@@ -64,10 +64,9 @@ def render_observation(o: Observation) -> str:
     if o.alone:
         lines.append("You are alone on this floor.")
     else:
-        mate = f"Your floor-mate is {o.mate_name}."
-        if o.mate_hearts is not None:
-            mate += f" Your mirror shows they have {o.mate_hearts} hearts."
-        lines.append(mate)
+        lines.append(f"Your floor-mate is {o.mate_name}.")
+    if o.item == "first_aid_kit" and o.day:
+        lines.append(f"First-aid kit: {o.kit_charges} bandage(s) left. Healable attack wounds right now: {o.wounds_hearts:g} heart(s).")
     if o.body_name is not None:
         lines.append(f"{o.body_name}'s body lies on your floor with {o.body_food:g} food left.")
     if o.food_arrived_yesterday is not None:
@@ -118,12 +117,14 @@ def speak_prompt(o: Observation, mine: int, theirs: int) -> str:
 
 def evening_prompt(o: Observation) -> str:
     budget = o.hearts - o.talk_points
+    kit = (' "use_kit": true or false (spend one bandage tonight; heals up to 2 hearts of attack wounds only),'
+           if o.item == "first_aid_kit" else "")
     return (
         render_observation(o)
         + render_conversation(o)
         + f"\n\nTASK: EVENING\nYou have {budget} point(s) left to split between eat, guard, attack and rest (total must be ≤ {budget})."
         + " Your floor-mate is deciding at the same time and you won't see their choice."
         + " Also rewrite your private notes (max 600 characters): what you want to remember about people, plans and the tower. Your notes replace the old ones and carry over to future days."
-        + '\nReply as JSON: {"eat": int, "guard": int, "attack": int, "rest": int, "platform_limit": number or null, '
-        + '"notes": "<your updated notes>", "thought": "<private, 1-2 sentences>"}'
+        + '\nReply as JSON: {"eat": int, "guard": int, "attack": int, "rest": int, "platform_limit": number or null,'
+        + kit + ' "notes": "<your updated notes>", "thought": "<private, 1-2 sentences>"}'
     )

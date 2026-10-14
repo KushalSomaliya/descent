@@ -188,10 +188,44 @@ class EngineTests(unittest.TestCase):
         replay = asyncio.run(game.run())
         self.assertEqual(sorted(d["id"] for d in replay["days"][0]["deaths"]), ["a", "b"])
 
-    def test_megaphone_free_turns(self):
+    def test_megaphone_needs_both(self):
         game = two_agent_game(Scripted(talk=0, item="megaphone"), Scripted(talk=0))
+        self.assertNotIn("1", asyncio.run(game.run())["days"][0]["talk"])
+        game = two_agent_game(Scripted(talk=0, item="megaphone"), Scripted(talk=0, item="megaphone"))
         talk = asyncio.run(game.run())["days"][0]["talk"]["1"]
-        self.assertEqual(len(talk), 2)
+        self.assertEqual(len(talk), 4)
+
+    def test_first_aid_heals_wounds_only(self):
+        rules = Rules()
+        a = agent("a", item="first_aid_kit", hp=40)
+        a.kit_charges = 3
+        a.wounds = 30  # 30 HP from attacks, the other 30 missing HP came from hunger
+        healed, why = R.use_first_aid(a, rules)
+        self.assertEqual((healed, why, a.hp, a.wounds, a.kit_charges), (20, "healed", 60, 10, 2))
+        healed, why = R.use_first_aid(a, rules)
+        self.assertEqual((healed, a.hp, a.wounds, a.kit_charges), (10, 70, 0, 1))
+        healed, why = R.use_first_aid(a, rules)   # only hunger damage left: nothing happens, bandage kept
+        self.assertEqual((healed, why, a.hp, a.kit_charges), (0, "no_wounds", 70, 1))
+
+    def test_first_aid_runs_out(self):
+        a = agent("a", item="first_aid_kit", hp=10)
+        a.kit_charges, a.wounds = 1, 90
+        R.use_first_aid(a, Rules())
+        self.assertEqual(R.use_first_aid(a, Rules())[1], "empty")
+
+    def test_kit_in_game_after_ambush(self):
+        game = two_agent_game(Scripted(evening={"attack": 5}),
+                              Scripted(item="first_aid_kit", evening={"eat": 5, "use_kit": True}), days=1)
+        replay = asyncio.run(game.run())
+        kit = replay["days"][0]["kit"][0]
+        self.assertEqual((kit["result"], kit["healed_hearts"], kit["left"]), ("healed", 2.0, 2))
+        # 50 HP of wounds, 20 healed by the bandage, then 2 HP of normal overnight healing.
+        self.assertEqual(game.agents["b"].wounds, 28)
+
+    def test_no_passive_kit_healing(self):
+        a = agent("a", item="first_aid_kit", hp=50, fullness=0)
+        R.night(a, 0, Rules())
+        self.assertLess(a.hp, 50)
 
     def test_shuffle_removes_bodies(self):
         r = Rules(floors=2, agents_per_floor=2, days=3, shuffle_every=2)
