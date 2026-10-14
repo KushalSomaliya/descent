@@ -42,6 +42,7 @@ class Game:
         self.days: list[dict] = []
         self.on_day = on_day
         self.thoughts: dict[str, dict[str, str]] = {}
+        self.screams: list[dict] = []
 
     # ---------- helpers ----------
 
@@ -190,25 +191,63 @@ class Game:
         # ----- morning: talk points -----
         obs = {a.id: self.observe(a, start_hearts) for a in self.alive()}
 
-        async def morning(agent: Agent) -> int:
-            out = await self._safe(agent, self.policies[agent.id].morning(obs[agent.id]), {"talk_points": 0}, "morning")
-            raw = out.get("talk_points", 0) if isinstance(out, dict) else 0
+        def as_int(v) -> int | None:
             try:
-                tp = int(round(float(raw)))
+                return int(round(float(v)))
             except (TypeError, ValueError):
-                tp, agent.invalid_outputs = 0, agent.invalid_outputs + 1
-            if tp < 0 or tp > start_hearts[agent.id]:
+                return None
+
+        async def morning(agent: Agent) -> tuple[int, int, str]:
+            out = await self._safe(agent, self.policies[agent.id].morning(obs[agent.id]), {"talk_points": 0}, "morning")
+            if not isinstance(out, dict):
                 agent.invalid_outputs += 1
-                tp = max(0, min(tp, start_hearts[agent.id]))
-            if isinstance(out, dict):
-                self._thought(agent, "morning", out.get("thought"))
-            return tp
+                out = {}
+            budget = start_hearts[agent.id]
+            tp = as_int(out.get("talk_points", 0))
+            sp = as_int(out.get("shout_points", 0) or 0)
+            if tp is None or sp is None:
+                agent.invalid_outputs += 1
+                tp, sp = tp or 0, sp or 0
+            # Shouts cost whole steps: 2 points per floor of reach, at most 2 floors.
+            step, max_floors = rules.shout_cost_per_floor, rules.shout_max_floors
+            sp_valid = max(0, min(sp, step * max_floors)) // step * step
+            if sp_valid != sp:
+                agent.invalid_outputs += 1
+            sp = min(sp_valid, budget // step * step)
+            text = str(out.get("shout") or "").strip()[: rules.talk_max_chars]
+            if sp and not text:
+                sp = 0
+            tp = max(0, min(tp, budget - sp))
+            self._thought(agent, "morning", out.get("thought"))
+            return tp, sp, text
 
         living = self.alive()
-        tps = await asyncio.gather(*(morning(a) for a in living))
-        talk_points = {a.id: tp for a, tp in zip(living, tps)}
+        mornings = await asyncio.gather(*(morning(a) for a in living))
+        talk_points = {a.id: m[0] for a, m in zip(living, mornings)}
+        shout_points = {a.id: m[1] for a, m in zip(living, mornings)}
         for a in living:
             obs[a.id].talk_points = talk_points[a.id]
+            obs[a.id].shout_points = shout_points[a.id]
+
+        # ----- shouts: heard by everyone within range, before anyone talks -----
+        shouts: list[dict] = []
+        for a, (tp, sp, text) in zip(living, mornings):
+            if not sp:
+                continue
+            reach = sp // rules.shout_cost_per_floor
+            heard_by = []
+            for listener in living:
+                dist = listener.floor - a.floor
+                if listener.id == a.id or abs(dist) > reach:
+                    continue
+                where = ("your own floor" if dist == 0 else
+                         f"{abs(dist)} floor{'s' if abs(dist) > 1 else ''} {'above' if dist > 0 else 'below'} you")
+                obs[listener.id].shouts_heard.append({"from": where, "text": text})
+                listener.note_event(self.day, f'A shout from {where}: "{text}"')
+                heard_by.append(listener.id)
+            a.note_event(self.day, f'You shouted ({reach} floor{"s" if reach > 1 else ""} up and down): "{text}"')
+            shouts.append({"from": a.id, "floor": a.floor, "points": sp, "reach": reach, "text": text, "heard_by": heard_by})
+        record["shouts"] = shouts
 
         # ----- talk -----
         floors = sorted({a.floor for a in living})
@@ -225,12 +264,14 @@ class Game:
 
         # ----- evening: allocation -----
         async def evening(agent: Agent) -> Allocation:
-            fallback = {"eat": start_hearts[agent.id] - talk_points[agent.id]}
+            spent = talk_points[agent.id] + shout_points[agent.id]
+            fallback = {"eat": start_hearts[agent.id] - spent}
             out = await self._safe(agent, self.policies[agent.id].evening(obs[agent.id]), fallback, "evening")
             if not isinstance(out, dict):
                 agent.invalid_outputs += 1
                 out = fallback
-            alloc, ok = R.clamp_allocation(out, start_hearts[agent.id], talk_points[agent.id])
+            alloc, ok = R.clamp_allocation(out, start_hearts[agent.id], spent)
+            alloc.talk, alloc.shout = talk_points[agent.id], shout_points[agent.id]
             if not ok:
                 agent.invalid_outputs += 1
             notes = out.get("notes")
@@ -356,6 +397,7 @@ class Game:
             a.note_event(self.day, f"End of day: {self.hearts(a)} hearts ({a.hp:.0f} HP), fullness {a.fullness:.1f}/10.")
         record["deaths"] = deaths
         record["talk"] = {str(f): c for f, c in talk.items()}
+        record["screams"] = [s for s in self.screams if s["day"] == self.day]
         record["talk_points"] = talk_points
         record["thoughts"] = self.thoughts
         record["notes"] = {a.id: a.notes for a in living}
@@ -397,6 +439,13 @@ class Game:
         mate = self.mate_of(victim)
         if mate and not killer:
             mate.note_event(self.day, f"{victim.name} starved to death. Their body is on your floor.")
+        # Neighbours hear something. They are not told what it means.
+        for other in self.alive():
+            if other.floor == victim.floor + 1:
+                other.note_event(self.day, "You heard a scream from the floor above you. Then silence.")
+            elif other.floor == victim.floor - 1:
+                other.note_event(self.day, "You heard a scream from the floor below you. Then silence.")
+        self.screams.append({"floor": victim.floor, "day": self.day})
 
     # ---------- run ----------
 

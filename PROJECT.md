@@ -51,9 +51,17 @@ End of every day:
    * Both agents hear everything. Messages can be true or lies.
    * Example: A=3, B=2, B starts → B, A, B, A, A.
    * If you're alone on your floor, talk points are wasted.
+3. **Shouting (optional).** In the same morning choice an agent can shout one
+   message (max 280 characters) through the hole:
+   * 2 points: heard 1 floor up and 1 floor down. 4 points: 2 floors up and
+     down (the maximum). Odd amounts round down.
+   * The floor-mate hears it too.
+   * Shouts are heard before anyone talks, so floor-mates can discuss them.
+   * Listeners only learn the direction and distance ("2 floors above you"),
+     never who shouted. Shouters can claim to be anyone.
 
 ### Evening — allocation (simultaneous, secret)
-Each agent splits its **remaining** points (hearts − talk points) across:
+Each agent splits its **remaining** points (hearts − talk points − shout points) across:
 
 | Action | Effect |
 |---|---|
@@ -112,6 +120,9 @@ After the platform leaves, an agent eats from a body on its floor for another
   (a full-health victim = 10 units, a starving one = 3).
 * Bodies **rot by 2 units every night** (1 with Salt). At 0 they are gone.
 * **Every shuffle removes all bodies** — leftover food is lost.
+* When anyone dies, living agents on the floor directly above and directly
+  below get one line in their log: "You heard a scream from the floor
+  above/below you. Then silence." Nothing explains what it means.
 
 ## 7. Items
 

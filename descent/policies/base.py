@@ -33,6 +33,8 @@ class Observation:
     rules: Rules
     # Filled in during the day:
     talk_points: int = 0
+    shout_points: int = 0
+    shouts_heard: list[dict[str, str]] = field(default_factory=list)
     conversation: list[dict[str, str]] = field(default_factory=list)
 
     @property
@@ -51,7 +53,7 @@ class Policy:
         return {"item": "book", "thought": ""}
 
     async def morning(self, obs: Observation) -> dict[str, Any]:
-        """Return {"talk_points": int, "thought": str}."""
+        """Return {"talk_points": int, "shout_points": 0|2|4, "shout": str, "thought": str}."""
         return {"talk_points": 0, "thought": ""}
 
     async def speak(self, obs: Observation, my_turns_left: int, their_turns_left: int) -> str:
@@ -60,7 +62,7 @@ class Policy:
 
     async def evening(self, obs: Observation) -> dict[str, Any]:
         """Return {"eat", "guard", "attack", "rest", "platform_limit", "notes", "thought"}."""
-        budget = obs.hearts - obs.talk_points
+        budget = obs.hearts - obs.talk_points - obs.shout_points
         return {"eat": budget, "guard": 0, "attack": 0, "rest": 0, "platform_limit": None}
 
     def usage(self) -> dict[str, Any]:

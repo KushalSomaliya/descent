@@ -303,3 +303,66 @@ class HeartsAndPromptTests(unittest.TestCase):
         text = prompts.system_prompt(a.name, game.rules) + prompts.evening_prompt(obs) + prompts.morning_prompt(obs)
         self.assertNotIn("77", text)
         self.assertIn("DAY 5.", text)
+
+
+class Shouter(Scripted):
+    def __init__(self, points, text="Help!", **kw):
+        super().__init__(**kw)
+        self.points, self.text = points, text
+
+    async def morning(self, obs):
+        return {"talk_points": 0, "shout_points": self.points, "shout": self.text}
+
+    async def evening(self, obs):
+        self.seen_budget = obs.hearts - obs.talk_points - obs.shout_points
+        return {"eat": self.seen_budget}
+
+
+class ShoutAndScreamTests(unittest.TestCase):
+    def tower(self, shouter_policy, floors=6, killer_floor=None):
+        r = Rules(floors=floors, agents_per_floor=1, days=1)
+        agents = [Agent(id=f"f{f}", name=f"F{f}", policy_name="t") for f in range(1, floors + 1)]
+        pols = {a.id: Scripted() for a in agents}
+        pols["f3"] = shouter_policy
+        game = Game(r, agents, pols, seed=0)
+        game.assign_floors = lambda: [setattr(a, "floor", int(a.id[1:])) for a in agents]
+        return game
+
+    def test_two_points_reach_one_floor(self):
+        game = self.tower(Shouter(2))
+        replay = asyncio.run(game.run())
+        s = replay["days"][0]["shouts"][0]
+        self.assertEqual((s["reach"], sorted(s["heard_by"])), (1, ["f2", "f4"]))
+        self.assertEqual(game.policies["f3"].seen_budget, 8)
+
+    def test_four_points_reach_two_floors(self):
+        game = self.tower(Shouter(4))
+        s = asyncio.run(game.run())["days"][0]["shouts"][0]
+        self.assertEqual(sorted(s["heard_by"]), ["f1", "f2", "f4", "f5"])
+
+    def test_odd_points_round_down(self):
+        game = self.tower(Shouter(3))
+        s = asyncio.run(game.run())["days"][0]["shouts"][0]
+        self.assertEqual(s["points"], 2)
+
+    def test_listeners_get_direction_not_name(self):
+        game = self.tower(Shouter(2, text="Floor 3 here"))
+        asyncio.run(game.run())
+        line = " ".join(game.agents["f2"].log[-1][1])
+        self.assertIn("1 floor below you", line)
+        self.assertNotIn("F3", line.replace("Floor 3 here", ""))
+
+    def test_neighbours_hear_a_death(self):
+        r = Rules(floors=3, agents_per_floor=2, days=1)
+        agents = [Agent(id=x, name=x.upper(), policy_name="t") for x in ("a", "b", "c", "d", "e", "f")]
+        pols = {x.id: Scripted() for x in agents}
+        pols["c"] = Scripted(evening={"attack": 10})
+        game = Game(r, agents, pols, seed=0)
+        floor_of = {"a": 1, "b": 1, "c": 2, "d": 2, "e": 3, "f": 3}
+        game.assign_floors = lambda: [setattr(a, "floor", floor_of[a.id]) for a in agents]
+        asyncio.run(game.run())
+        self.assertFalse(game.agents["d"].alive)
+        above = " ".join(game.agents["a"].log[-1][1])
+        below = " ".join(game.agents["e"].log[-1][1])
+        self.assertIn("scream from the floor below you", above)
+        self.assertIn("scream from the floor above you", below)

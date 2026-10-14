@@ -27,6 +27,7 @@ FOOD AND HUNGER
 
 A DAY
 1. Morning: you choose how many points to spend on TALK. Each talk point is one message (max {rules.talk_max_chars} characters) to your floor-mate. You take turns; a random person starts. Both of you hear everything said. You can say anything — true or false.
+   You may also SHOUT one message (max {rules.talk_max_chars} characters) through the hole in the floor: {rules.shout_cost_per_floor} points and it is heard 1 floor up and 1 floor down, {rules.shout_cost_per_floor * rules.shout_max_floors} points and it is heard 2 floors up and 2 floors down (the maximum). Your floor-mate hears it too. Shouts are heard in the morning before anyone talks. Listeners know only how many floors above or below it came from, not who shouted.
 2. Evening: you secretly split your remaining points between:
    - eat: eating speed for the platform and for any body on your floor
    - guard: blocks attack points one-for-one
@@ -80,10 +81,13 @@ def render_observation(o: Observation) -> str:
 
 
 def render_conversation(o: Observation) -> str:
-    if not o.conversation:
-        return ""
-    msgs = "\n".join(f'{m["name"]}: "{m["text"]}"' for m in o.conversation)
-    return f"\nTODAY'S CONVERSATION SO FAR:\n{msgs}"
+    out = ""
+    if o.shouts_heard:
+        out += "\nSHOUTS YOU HEARD THIS MORNING:\n" + "\n".join(f'From {s["from"]}: "{s["text"]}"' for s in o.shouts_heard)
+    if o.conversation:
+        msgs = "\n".join(f'{m["name"]}: "{m["text"]}"' for m in o.conversation)
+        out += f"\nTODAY'S CONVERSATION SO FAR:\n{msgs}"
+    return out
 
 
 def item_prompt(o: Observation) -> str:
@@ -96,11 +100,13 @@ def item_prompt(o: Observation) -> str:
 
 def morning_prompt(o: Observation) -> str:
     who = "You are alone on this floor, so talking is pointless today." if o.alone else f"Talking happens with {o.mate_name}."
+    step, top = o.rules.shout_cost_per_floor, o.rules.shout_cost_per_floor * o.rules.shout_max_floors
     return (
         render_observation(o)
-        + f"\n\nTASK: MORNING\nYou have {o.hearts} point(s) today. How many will you spend on talking? {who}"
-        + " Points spent on talk cannot be used for eat/guard/attack/rest tonight."
-        + '\nReply as JSON: {"talk_points": <integer 0..' + str(o.hearts) + '>, "thought": "<private, 1-2 sentences>"}'
+        + f"\n\nTASK: MORNING\nYou have {o.hearts} point(s) today. How many will you spend on talking, and will you shout? {who}"
+        + f" Shouting costs 0, {step} or {top} points. Points spent on talking or shouting cannot be used for eat/guard/attack/rest tonight."
+        + '\nReply as JSON: {"talk_points": <integer>, "shout_points": <0, ' + str(step) + ' or ' + str(top) + '>, '
+        + '"shout": "<your shout, or empty>", "thought": "<private, 1-2 sentences>"}'
     )
 
 
@@ -115,7 +121,7 @@ def speak_prompt(o: Observation, mine: int, theirs: int) -> str:
 
 
 def evening_prompt(o: Observation) -> str:
-    budget = o.hearts - o.talk_points
+    budget = o.hearts - o.talk_points - o.shout_points
     kit = (' "use_kit": true or false (spend one bandage tonight; heals up to 2 hearts of attack wounds only),'
            if o.item == "first_aid_kit" else "")
     return (

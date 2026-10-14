@@ -62,6 +62,7 @@ Scripted bots: `bot:fair`, `bot:greedy`, `bot:paranoid`, `bot:killer`, `bot:rand
 
 ```bash
 python -m descent run <config> [--seed N] [--days N] [--rule food_ratio=1.0]
+python -m descent run <config> --repeat 5                  # 5 games, seeds N..N+4, one combined leaderboard
 python -m descent tune --games 50 [--rule eat_rate=0.25]   # economy stats from bot games
 python -m descent summary runs/<run_id>/replay.json
 python -m unittest discover -s tests                       # tests
@@ -76,6 +77,10 @@ python -m descent run configs/three_models.json
 ```
 
 Before day 1 it makes one tiny call per model, so a wrong key or model name fails in seconds. The replay is saved after every day, so if the run stops halfway you can still watch what happened. The running cost prints on each day's line.
+
+## Comparing models
+
+One game is mostly luck: who starts on floor 1, who gets paired with whom. Use `--repeat` to play the same setup with several seeds and get one leaderboard per model (survival rate, average days survived, hearts, kills, greed). Each game's replay and a `results.json` are saved in one folder. Spending limits apply per game.
 
 ## Spending limits
 

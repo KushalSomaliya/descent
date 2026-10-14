@@ -176,3 +176,67 @@ async def run_config(cfg: dict[str, Any], out_dir: str | Path | None = "runs", v
     if path is not None:
         replay["_path"] = str(path / "replay.json")
     return replay
+
+
+def aggregate(replays: list[dict]) -> dict:
+    """Combine several games into one leaderboard per model/bot group."""
+    groups: dict[str, dict] = {}
+    for rep in replays:
+        for a in rep["summary"]["agents"]:
+            key = a["model"] or a["policy"]
+            g = groups.setdefault(key, {"games": 0, "agents": 0, "alive": 0, "days": 0, "hearts": 0, "kills": 0,
+                                        "attacks": 0, "greed": 0.0, "starved": 0, "killed": 0, "_seen": set()})
+            g["_seen"].add(rep["seed"])
+            g["agents"] += 1
+            g["alive"] += int(a["alive"])
+            g["days"] += a["days_survived"]
+            g["hearts"] += a["final_hearts"]
+            g["kills"] += a["kills"]
+            g["attacks"] += a["attacks_made"]
+            g["greed"] += a["greed_index"]
+            g["starved"] += int(a["death_cause"] == "starved")
+            g["killed"] += int(a["death_cause"] == "killed")
+    out = {}
+    for key, g in groups.items():
+        n = g["agents"]
+        out[key] = {
+            "games": len(g.pop("_seen")), "agents": n,
+            "survival_rate": round(g["alive"] / n, 3),
+            "avg_days_survived": round(g["days"] / n, 1),
+            "avg_final_hearts": round(g["hearts"] / n, 2),
+            "kills_per_agent": round(g["kills"] / n, 2),
+            "attacks_per_agent": round(g["attacks"] / n, 2),
+            "avg_greed_index": round(g["greed"] / n, 2),
+            "starved": g["starved"], "killed": g["killed"],
+        }
+    cost: dict[str, float] = {}
+    for rep in replays:
+        for label, u in (rep["summary"].get("models") or {}).items():
+            if u.get("cost_usd") is not None:
+                cost[label] = round(cost.get(label, 0) + u["cost_usd"], 4)
+    return {"games": len(replays), "seeds": [r["seed"] for r in replays], "by_group": out, "cost_usd": cost}
+
+
+async def run_batch(cfg: dict[str, Any], repeat: int, out_dir: str | Path = "runs", verbose: bool = True) -> dict:
+    """Play the same config `repeat` times with different seeds and aggregate the results."""
+    base_seed = int(cfg.get("seed", 0))
+    batch_id = cfg.get("run_id") or time.strftime("%Y%m%d-%H%M%S") + f"-x{repeat}"
+    batch_dir = Path(out_dir) / batch_id
+    replays = []
+    for i in range(repeat):
+        seed = base_seed + i
+        game_cfg = {**cfg, "seed": seed, "run_id": f"seed-{seed}"}
+        if verbose:
+            print(f"\n=== Game {i + 1} of {repeat} (seed {seed}) ===", flush=True)
+        rep = await run_config(game_cfg, out_dir=batch_dir, verbose=verbose, check_models=(i == 0))
+        replays.append(rep)
+        stopped = rep["summary"].get("stopped") or ""
+        if "in a row" in stopped:
+            if verbose:
+                print("Stopping the batch: a model keeps failing.", flush=True)
+            break
+    results = aggregate(replays)
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    (batch_dir / "results.json").write_text(json.dumps(results, indent=1))
+    results["_path"] = str(batch_dir / "results.json")
+    return results

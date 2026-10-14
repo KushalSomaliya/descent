@@ -68,10 +68,12 @@ class Allocation:
     rest: int = 0
     platform_limit: float | None = None
     use_kit: bool = False
+    shout: int = 0
 
     def to_dict(self) -> dict:
         return {
             "use_kit": self.use_kit,
+            "shout": self.shout,
             "talk": self.talk,
             "eat": self.eat,
             "guard": self.guard,

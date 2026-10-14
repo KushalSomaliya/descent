@@ -296,6 +296,8 @@ class MockClient(LLMClient):
                    "thought": "Picking something useful."}
         elif kind == "MORNING":
             out = {"talk_points": 0 if "alone on this floor" in user else rng.randint(0, 2), "thought": "Let's see."}
+            if rng.random() < 0.15:
+                out.update(shout_points=rng.choice([2, 4]), shout="Leave some food for the floors below!")
         elif kind == "SPEAK":
             out = {"message": rng.choice(["Hi. Let's share fairly.", "I won't attack you.", "How many hearts do you have?",
                                           "I brought a book, nothing dangerous.", "The floors below need food too."])}

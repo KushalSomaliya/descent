@@ -50,6 +50,9 @@ class Rules:
     # Talk
     talk_max_chars: int = 280
     megaphone_free_turns: int = 2
+    # Shouting: points -> how many floors up AND down hear it. 2 points = 1 floor, 4 points = 2 floors (max).
+    shout_cost_per_floor: int = 2
+    shout_max_floors: int = 2
 
     # Items (see items.py)
     knife_attack_bonus: int = 2

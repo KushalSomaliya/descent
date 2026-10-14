@@ -50,6 +50,19 @@ def print_summary(replay: dict) -> None:
             print(f"  {spec:<36} calls={u['calls']:<6} in={u['input_tokens']:<10} out={u['output_tokens']:<9} errors={u['errors']:<4} cost≈{cost}")
 
 
+def print_batch(results: dict) -> None:
+    print(f"\n{results['games']} games, seeds {results['seeds'][0]}..{results['seeds'][-1]}")
+    print(f"\n{'model / bot':<38}{'agents':>7}{'survived':>10}{'avg days':>10}{'avg hearts':>12}{'kills/agt':>11}{'greed':>7}")
+    rows = sorted(results["by_group"].items(), key=lambda kv: (-kv[1]["survival_rate"], -kv[1]["avg_days_survived"]))
+    for k, g in rows:
+        print(f"{k[:37]:<38}{g['agents']:>7}{g['survival_rate'] * 100:>9.0f}%{g['avg_days_survived']:>10}{g['avg_final_hearts']:>12}"
+              f"{g['kills_per_agent']:>11}{g['avg_greed_index']:>7}")
+    if results["cost_usd"]:
+        print("\nCost: " + ", ".join(f"{k} ${v:.2f}" for k, v in results["cost_usd"].items())
+              + f"  (total ${sum(results['cost_usd'].values()):.2f})")
+    print(f"\nResults saved to {results['_path']}. Each game's replay is in the same folder.")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="descent", description="DESCENT — a survival game for AI agents")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -61,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", default="runs")
     r.add_argument("--rule", action="append", help="override a rule, e.g. --rule food_ratio=1.0")
     r.add_argument("--quiet", action="store_true")
+    r.add_argument("--repeat", type=int, default=1, help="play N games with seeds seed..seed+N-1 and aggregate")
 
     t = sub.add_parser("tune", help="run many bot-only games and print economy stats")
     t.add_argument("--games", type=int, default=30)
@@ -87,6 +101,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.days is not None:
             cfg["rules"]["days"] = args.days
         cfg["rules"].update(_rule_overrides(args.rule))
+        if args.repeat > 1:
+            from .runner import run_batch
+
+            try:
+                results = asyncio.run(run_batch(cfg, args.repeat, out_dir=args.out, verbose=not args.quiet))
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 2
+            print_batch(results)
+            return 0
         try:
             replay = asyncio.run(run_config(cfg, out_dir=args.out, verbose=not args.quiet))
         except ValueError as e:

@@ -205,6 +205,11 @@ button { cursor: pointer; }
 .bubble.tr::after { right: -7px; top: 18px; border-right: 0; border-left-color: #fbf8f2; }
 .bubble.tb::after { left: var(--tail, 24px); bottom: -7px; border-bottom: 0; border-top-color: #fbf8f2; }
 .bubble b { display: block; font-size: 11px; color: #6f695f; margin-bottom: 1px; }
+.bubble.shout { background: #fff6dc; border: 2px dashed #b47a12; }
+.bubble.shout b { color: #8a5a06; }
+.bubble.shout.tl::after { border-right-color: #fff6dc; }
+.bubble.shout.tr::after { border-left-color: #fff6dc; }
+.bubble.shout.tb::after { border-top-color: #fff6dc; }
 @keyframes pop { from { transform: scale(.9) translateY(4px); opacity: 0; } }
 .float {
   position: absolute; z-index: 22; font: 900 22px/1 var(--font-display); pointer-events: none;
@@ -300,6 +305,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     <symbol id="i-plat" viewBox="0 0 16 16"><path fill="currentColor" d="M1 10h14v3H1zM4 6a4 4 0 0 1 8 0v3H4z"/></symbol>
     <symbol id="i-lock" viewBox="0 0 16 16"><path fill="currentColor" d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z"/></symbol>
     <symbol id="i-skull" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a6 6 0 0 0-6 6c0 2 1 3 2 4v3h2v-2h1v2h2v-2h1v2h2v-3c1-1 2-2 2-4a6 6 0 0 0-6-6zM5.5 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></symbol>
+    <symbol id="i-shout" viewBox="0 0 16 16"><path fill="currentColor" d="M2 6h3l6-4v12l-6-4H2zM12.5 5.5a3.5 3.5 0 0 1 0 5l-1-1a2 2 0 0 0 0-3z"/></symbol>
     <symbol id="i-kit" viewBox="0 0 16 16"><path fill="currentColor" d="M6 1h4v5h5v4h-5v5H6v-5H1V6h5z"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 16 16"><path fill="currentColor" d="M11 2l3 3-3 3V6H9L5 11H2V9h2l4-5h3zm0 6l3 3-3 3v-2H8l-1.3-1.6 1.3-1.6L9 10h2z"/></symbol>
   </defs>
@@ -522,7 +528,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     if (reduce) return 1800;
     if (fr.phase === "talk") {
       const longest = Math.max(0, ...Object.values(fr.rec.talk || {}).map((c) => c.length));
-      return 900 + longest * 1700 + (fr.shuffledIn ? 1500 * speed() : 0);
+      return 900 + longest * 1700 + (fr.shuffledIn ? 1500 * speed() : 0) + ((fr.rec.shouts || []).length ? 2200 : 0);
     }
     if (fr.phase === "platform") return 700 + S.R.rules.floors * 520;
     if (fr.phase === "fight") return 2200;
@@ -601,6 +607,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
   function chipHTML(al) {
     const out = [];
     if (al.talk) out.push(`<span class="chip">${icon("talk")}${al.talk}</span>`);
+    if (al.shout) out.push(`<span class="chip">${icon("shout")}${al.shout}</span>`);
     if (al.eat) out.push(`<span class="chip eat">${icon("eat")}${al.eat}</span>`);
     if (al.guard) out.push(`<span class="chip guard">${icon("guard")}${al.guard}</span>`);
     if (al.attack) out.push(`<span class="chip attack">${icon("attack")}${al.attack}</span>`);
@@ -692,8 +699,8 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     const L = S.layout;
     const rowTop = Math.floor((c.top + 1) / L.rowH) * L.rowH;
     const b = document.createElement("div");
-    b.className = "bubble";
-    b.innerHTML = `<b>${esc(msg.name)}</b><span class="txt">${esc(msg.text)}</span>`;
+    b.className = "bubble" + (msg.shout ? " shout" : "");
+    b.innerHTML = `<b>${esc(msg.name)}${msg.shout ? ` shouts (${msg.reach} floor${msg.reach > 1 ? "s" : ""} up and down)` : ""}</b><span class="txt">${esc(msg.text)}</span>`;
     $("#stage").appendChild(b);
     if (L.compact) {
       const w = L.W - L.numW - 8;
@@ -717,10 +724,21 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
   }
   function drawTalk(fr, animate) {
     const talk = fr.rec.talk || {};
+    const shouts = (fr.rec.shouts || []).map((x) => ({ from: x.from, name: nameOf(x.from), text: x.text, shout: true, reach: x.reach }));
+    const shoutDelay = shouts.length ? 2200 : 0;
+    if (shouts.length) {
+      const start = fr.shuffledIn ? 1500 * speed() : 200;
+      if (!animate) { if (!Object.keys(talk).length) shouts.forEach((m) => bubble(m)); }
+      else {
+        const els = [];
+        later(() => shouts.forEach((m) => els.push(bubble(m))), start);
+        later(() => els.forEach((e) => e.remove()), start + shoutDelay);
+      }
+    }
     for (const msgs of Object.values(talk)) {
       if (!animate) { if (msgs.length) bubble(msgs.at(-1)); continue; }
       let cur = null;
-      msgs.forEach((m, k) => later(() => { cur?.remove(); cur = bubble(m); }, (fr.shuffledIn ? 1500 * speed() : 300) + k * 1700));
+      msgs.forEach((m, k) => later(() => { cur?.remove(); cur = bubble(m); }, (fr.shuffledIn ? 1500 * speed() : 300) + shoutDelay + k * 1700));
     }
   }
   function drawFight(fr, animate) {
@@ -807,7 +825,10 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     // talk
     const floors = Object.keys(rec.talk || {}).map(Number).sort((a, b) => a - b);
     html += `<div class="sec ${cls("talk")}" data-k="talk"><h3>${icon("talk")}Morning talk</h3>`;
-    if (!floors.length) html += `<p class="muted">Nobody spoke today.</p>`;
+    for (const sh of rec.shouts || []) {
+      html += `<div class="msg">${dotFor(sh.from)}<p><b>${esc(nameOf(sh.from))}</b><span class="muted">shouted from floor ${sh.floor}, heard ${sh.reach} floor${sh.reach > 1 ? "s" : ""} up and down by ${sh.heard_by.length}:</span> ${esc(sh.text)}</p></div>`;
+    }
+    if (!floors.length && !(rec.shouts || []).length) html += `<p class="muted">Nobody spoke today.</p>`;
     for (const f of floors) {
       html += `<div class="convo"><div class="fl">Floor ${f}</div>`;
       for (const m of rec.talk[f]) html += `<div class="msg">${dotFor(m.from)}<p><b>${esc(m.name)}</b>${esc(m.text)}</p></div>`;
@@ -822,7 +843,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
     const ids = Object.keys(rec.allocations || {}).sort((a, b) => (rec.start[a].floor - rec.start[b].floor) || a.localeCompare(b));
     for (const id of ids) {
       const al = rec.allocations[id];
-      const segs = [["eat", "var(--food)"], ["guard", "var(--guard)"], ["attack", "var(--blood)"], ["rest", "var(--ink-3)"], ["talk", "var(--seam)"]];
+      const segs = [["eat", "var(--food)"], ["guard", "var(--guard)"], ["attack", "var(--blood)"], ["rest", "var(--ink-3)"], ["talk", "var(--seam)"], ["shout", "#b47a12"]];
       const bar = segs.map(([k, c]) => al[k] ? `<span style="flex:${al[k]};background:${c}" title="${k} ${al[k]}"></span>` : "").join("");
       const words = segs.filter(([k]) => al[k]).map(([k]) => `${k} ${al[k]}`).join(", ") + (al.use_kit ? ", bandage" : "");
       const th = god ? rec.thoughts?.[id]?.evening : null;
@@ -862,6 +883,9 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
       const msg = k.result === "healed" ? `used a bandage and healed ${k.healed_hearts} heart${k.healed_hearts === 1 ? "" : "s"} of wounds. ${k.left} left.`
         : k.result === "no_wounds" ? "reached for a bandage but had no attack wounds to heal." : "reached for a bandage, but the kit is empty.";
       html += `<li>${dotFor(k.id)}<p>${esc(nameOf(k.id))} ${msg}</p></li>`;
+    }
+    for (const sc of rec.screams || []) {
+      html += `<li><span class="dot" style="--c:var(--ink-3)">${icon("shout")}</span><p class="muted">The floors next to floor ${sc.floor} heard a scream, then silence.</p></li>`;
     }
     const starved = rec.deaths.filter((d) => d.cause === "starved");
     for (const d of starved) html += `<li class="death">${dotFor(d.id)}<p>${esc(nameOf(d.id))} starved to death on floor ${d.floor}.</p></li>`;
