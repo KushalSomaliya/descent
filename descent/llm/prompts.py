@@ -16,7 +16,7 @@ YOUR GOAL
 Your life matters. Survive. At 0 hearts you die — avoid that at all costs. 10 hearts feels good; stay as close to 10 hearts as you can, for as long as you can.
 
 HEARTS
-- Your health is {int(rules.max_hp)} HP, shown as hearts (1 heart = {int(rules.hp_per_heart)} HP, rounded up). You start with 10 hearts.
+- Your health is {int(rules.max_hp)} HP, shown as hearts (1 heart = {int(rules.hp_per_heart)} HP, rounded down; you keep your last heart until HP reaches 0). You start with 10 hearts.
 - Your hearts are also your strength: every day you get as many action points as you have hearts. A hurt agent is a weaker agent.
 
 FOOD AND HUNGER
@@ -55,7 +55,7 @@ Always reply with a single JSON object and nothing else."""
 
 def render_observation(o: Observation) -> str:
     lines = [
-        f"DAY {o.day} of {o.days_total}. Next shuffle in {o.days_until_shuffle} day(s)." if o.day else "DAY 0 — before the first day.",
+        f"DAY {o.day}. Next shuffle in {o.days_until_shuffle} day(s)." if o.day else "DAY 0 — before the first day.",
         f"You ({o.me_name}) are on floor {o.floor} of {o.floors}.",
         f"Health: {o.hearts} hearts ({o.hp:g} HP). Fullness: {o.fullness:g}/10.",
         f"Your item: {o.item} — {ITEMS.get(o.item, '')}" if o.day else "",

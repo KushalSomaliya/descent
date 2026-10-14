@@ -284,3 +284,22 @@ class EngineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeartsAndPromptTests(unittest.TestCase):
+    def test_hearts_round_down_keep_last(self):
+        self.assertEqual(agent(hp=100).hearts(), 10)
+        self.assertEqual(agent(hp=99.5).hearts(), 9)
+        self.assertEqual(agent(hp=10).hearts(), 1)
+        self.assertEqual(agent(hp=3).hearts(), 1)
+        self.assertEqual(agent(hp=0).hearts(), 0)
+
+    def test_game_length_hidden(self):
+        from descent.llm import prompts
+        game = build_game({"seed": 1, "rules": {"days": 77}, "agents": [{"policy": "bot:fair", "count": 2}]})
+        a = next(iter(game.agents.values()))
+        game.day = 5
+        obs = game.observe(a, {x.id: 10 for x in game.agents.values()})
+        text = prompts.system_prompt(a.name, game.rules) + prompts.evening_prompt(obs) + prompts.morning_prompt(obs)
+        self.assertNotIn("77", text)
+        self.assertIn("DAY 5.", text)

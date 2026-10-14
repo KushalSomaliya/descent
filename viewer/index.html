@@ -397,7 +397,7 @@ table.lb .n { text-align: right; font-variant-numeric: tabular-nums; }
       for (const c of rec.combat || []) {
         const s = afterFight[c.defender];
         s.hp = Math.max(0, s.hp - c.damage_hearts * 10);
-        s.hearts = Math.max(0, Math.ceil(s.hp / 10 - 1e-9));
+        s.hearts = s.hp <= 0 ? 0 : Math.max(1, Math.floor(s.hp / 10 + 1e-9));
       }
       for (const d of rec.deaths || []) if (d.cause === "killed") { afterFight[d.id].alive = false; afterFight[d.id].hp = 0; afterFight[d.id].hearts = 0; fightBodies[d.id] = { victim: d.id, floor: d.floor }; }
       if ((rec.combat || []).length) frames.push({ ...base, phase: "fight", state: afterFight, bodies: fightBodies });

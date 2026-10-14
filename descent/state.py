@@ -38,9 +38,10 @@ class Agent:
     kit_used: int = 0
 
     def hearts(self, hp_per_heart: float = 10.0) -> int:
+        """Hearts round down, so every lost HP costs strength. You keep your last heart until HP hits 0."""
         if self.hp <= 0:
             return 0
-        return int(math.ceil(self.hp / hp_per_heart - 1e-9))
+        return max(1, int(math.floor(self.hp / hp_per_heart + 1e-9)))
 
     def note_event(self, day: int, line: str) -> None:
         if self.log and self.log[-1][0] == day:
